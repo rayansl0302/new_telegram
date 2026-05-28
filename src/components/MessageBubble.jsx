@@ -1,4 +1,9 @@
+import { useState } from "react";
+import MediaLightbox from "./MediaLightbox";
+
 function MessageBubble({ message, isOwn, isGroup, senderInfo }) {
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+
   const time = formatMessageTime(message.createdAt);
   const showSender = isGroup && !isOwn && senderInfo;
   const senderName =
@@ -20,13 +25,18 @@ function MessageBubble({ message, isOwn, isGroup, senderInfo }) {
           </p>
         )}
         {message.imageUrl && (
-          <a href={message.imageUrl} target="_blank" rel="noreferrer">
+          <button
+            type="button"
+            onClick={() => setLightboxOpen(true)}
+            className="block w-full"
+            aria-label="Ampliar imagem"
+          >
             <img
               src={message.imageUrl}
               alt="imagem"
-              className="rounded-lg mb-1 max-w-full max-h-80 object-contain"
+              className="rounded-lg mb-1 max-w-full max-h-80 object-contain hover:opacity-90 transition"
             />
-          </a>
+          </button>
         )}
         {message.text && (
           <p className="whitespace-pre-wrap break-words">
@@ -41,6 +51,13 @@ function MessageBubble({ message, isOwn, isGroup, senderInfo }) {
           {time}
         </p>
       </div>
+
+      {lightboxOpen && message.imageUrl && (
+        <MediaLightbox
+          src={message.imageUrl}
+          onClose={() => setLightboxOpen(false)}
+        />
+      )}
     </div>
   );
 }
@@ -56,7 +73,6 @@ function renderTextWithLinks(text, isOwn) {
   return parts.map((part, i) => {
     if (i % 2 === 0) return part;
 
-    // Separa pontuação final (ex: "https://foo.com." → URL "https://foo.com" + "." de volta no texto)
     const trailingMatch = part.match(TRAILING_PUNCT);
     const trailing = trailingMatch ? trailingMatch[0] : "";
     const cleanUrl = trailing ? part.slice(0, -trailing.length) : part;

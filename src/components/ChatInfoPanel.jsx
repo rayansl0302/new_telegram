@@ -10,6 +10,7 @@ import {
 } from "../services/chatService";
 import { uploadGroupPhoto } from "../services/storageService";
 import Avatar from "./Avatar";
+import MediaLightbox from "./MediaLightbox";
 
 function ChatInfoPanel({ chat, messages, onClose, onLeftGroup }) {
   const isGroup = chat.type === "group";
@@ -495,6 +496,8 @@ function PanelHeader({ title, onClose }) {
 }
 
 function MediaSection({ messages }) {
+  const [lightboxSrc, setLightboxSrc] = useState(null);
+
   const media = (messages || [])
     .filter((m) => m.imageUrl)
     .slice()
@@ -518,12 +521,12 @@ function MediaSection({ messages }) {
       ) : (
         <div className="grid grid-cols-3 gap-1">
           {media.map((m) => (
-            <a
+            <button
               key={m.id}
-              href={m.imageUrl}
-              target="_blank"
-              rel="noreferrer"
+              type="button"
+              onClick={() => setLightboxSrc(m.imageUrl)}
               className="aspect-square overflow-hidden rounded bg-slate-800 group block"
+              aria-label="Ampliar imagem"
             >
               <img
                 src={m.imageUrl}
@@ -531,9 +534,16 @@ function MediaSection({ messages }) {
                 loading="lazy"
                 className="w-full h-full object-cover group-hover:scale-110 transition"
               />
-            </a>
+            </button>
           ))}
         </div>
+      )}
+
+      {lightboxSrc && (
+        <MediaLightbox
+          src={lightboxSrc}
+          onClose={() => setLightboxSrc(null)}
+        />
       )}
     </section>
   );
