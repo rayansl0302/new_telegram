@@ -44,7 +44,7 @@ function ChatPage() {
   const showChatOnMobile = Boolean(selectedChatId);
 
   return (
-    <div className="h-dvh flex bg-slate-900 text-white overflow-hidden">
+    <div className="app-shell flex bg-slate-900 text-white overflow-hidden min-h-0">
       <Sidebar
         chats={chats}
         loading={loading}

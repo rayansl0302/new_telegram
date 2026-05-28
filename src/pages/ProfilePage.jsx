@@ -72,8 +72,8 @@ function ProfilePage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white">
-      <header className="px-4 py-3 border-b border-slate-800 flex items-center gap-3 sticky top-0 bg-slate-900/95 backdrop-blur z-10">
+    <div className="page-screen bg-slate-900 text-white flex flex-col min-h-0 overflow-y-auto">
+      <header className="px-4 py-3 border-b border-slate-800 flex items-center gap-3 shrink-0 bg-slate-900/95 backdrop-blur z-10">
         <button
           onClick={() => navigate("/")}
           className="p-2 hover:bg-slate-800 rounded-lg transition"

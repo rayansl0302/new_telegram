@@ -61,7 +61,7 @@ function NewChatDialog({ onClose, onChatCreated }) {
 
   return (
     <div
-      className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50"
+      className="fixed inset-0 bg-black/70 flex items-center justify-center modal-overlay z-50"
       onClick={onClose}
     >
       <div

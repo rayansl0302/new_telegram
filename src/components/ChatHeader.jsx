@@ -18,7 +18,7 @@ function ChatHeader({ chat, currentUserId, onBack, onOpenGroupSettings }) {
     const name = chat.name || "Grupo sem nome";
     const memberCount = chat.participants.length;
     return (
-      <header className="px-3 md:px-4 py-2 md:py-3 border-b border-slate-800 flex items-center gap-2 md:gap-3 bg-slate-950/95 backdrop-blur shrink-0 pt-[env(safe-area-inset-top)] md:pt-3">
+      <header className="px-3 md:px-4 py-2.5 md:py-3 border-b border-slate-800 flex items-center gap-2 md:gap-3 bg-slate-950/95 backdrop-blur shrink-0">
         {backButton}
         <button
           type="button"
@@ -52,7 +52,7 @@ function ChatHeader({ chat, currentUserId, onBack, onOpenGroupSettings }) {
   const name = otherInfo.displayName || otherInfo.email || "Usuário";
 
   return (
-    <header className="px-3 md:px-4 py-2 md:py-3 border-b border-slate-800 flex items-center gap-2 md:gap-3 bg-slate-950/95 backdrop-blur shrink-0 pt-[env(safe-area-inset-top)] md:pt-3">
+    <header className="px-3 md:px-4 py-2.5 md:py-3 border-b border-slate-800 flex items-center gap-2 md:gap-3 bg-slate-950/95 backdrop-blur shrink-0">
       {backButton}
       <Avatar src={otherInfo.photoURL} name={name} size={40} />
       <div className="min-w-0 flex-1">

@@ -37,7 +37,7 @@ function LoginPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-900 text-slate-400">
+      <div className="page-screen flex items-center justify-center bg-slate-900 text-slate-400">
         Carregando...
       </div>
     );
@@ -78,8 +78,9 @@ function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800 p-4">
-      <div className="w-full max-w-md bg-slate-800/60 backdrop-blur rounded-2xl shadow-2xl p-8 border border-slate-700">
+    <div className="page-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800 overflow-y-auto">
+      <div className="w-full max-w-md mx-auto p-4 py-6">
+      <div className="w-full bg-slate-800/60 backdrop-blur rounded-2xl shadow-2xl p-8 border border-slate-700">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-white mb-2">Telegram Clone</h1>
           <p className="text-slate-400 text-sm">
@@ -169,6 +170,7 @@ function LoginPage() {
             {mode === "login" ? "Criar conta" : "Entrar"}
           </button>
         </p>
+      </div>
       </div>
     </div>
   );

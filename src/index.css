@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+}
+
 html,
 body,
 #root {
@@ -10,4 +17,34 @@ body,
 body {
   overflow: hidden;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Shell principal: respeita notch, status bar e home indicator (PWA iOS) */
+.app-shell {
+  box-sizing: border-box;
+  height: 100dvh;
+  max-height: 100dvh;
+  padding-top: var(--safe-top);
+  padding-right: var(--safe-right);
+  padding-bottom: var(--safe-bottom);
+  padding-left: var(--safe-left);
+}
+
+/* Telas full-page (login, perfil, loading) */
+.page-screen {
+  box-sizing: border-box;
+  min-height: 100dvh;
+  padding-top: var(--safe-top);
+  padding-right: var(--safe-right);
+  padding-bottom: var(--safe-bottom);
+  padding-left: var(--safe-left);
+}
+
+/* Modais sobrepostos */
+.modal-overlay {
+  box-sizing: border-box;
+  padding-top: max(1rem, var(--safe-top));
+  padding-right: max(1rem, var(--safe-right));
+  padding-bottom: max(1rem, var(--safe-bottom));
+  padding-left: max(1rem, var(--safe-left));
 }

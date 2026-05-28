@@ -50,7 +50,7 @@ function Sidebar({
     <aside
       className={`bg-slate-950 border-r border-slate-800 flex flex-col min-h-0 shrink-0 ${className}`}
     >
-      <header className="md:hidden flex items-center justify-between px-4 py-3 border-b border-slate-800 bg-slate-950 pt-[env(safe-area-inset-top)]">
+      <header className="md:hidden flex items-center justify-between px-4 py-3 border-b border-slate-800 bg-slate-950 shrink-0">
         <h1 className="text-xl font-semibold">Conversas</h1>
         <Link
           to="/profile"
@@ -119,7 +119,7 @@ function Sidebar({
         ))}
       </div>
 
-      <div className="m-3 grid grid-cols-2 gap-2 pb-[env(safe-area-inset-bottom)] md:pb-3">
+      <div className="m-3 grid grid-cols-2 gap-2 shrink-0">
         <button
           onClick={() => setShowNewChat(true)}
           className="py-2.5 bg-sky-500 hover:bg-sky-600 text-white font-medium rounded-lg transition flex items-center justify-center gap-2"
