@@ -6,7 +6,7 @@ import ChatHeader from "./ChatHeader";
 import MessageList from "./MessageList";
 import MessageInput from "./MessageInput";
 import EmptyChat from "./EmptyChat";
-import EditGroupDialog from "./EditGroupDialog";
+import GroupInfoPanel from "./GroupInfoPanel";
 
 function ChatWindow({ chat, onBack, onGroupLeft }) {
   const { user } = useAuth();
@@ -27,27 +27,34 @@ function ChatWindow({ chat, onBack, onGroupLeft }) {
   if (!chat) return <EmptyChat />;
 
   const isGroup = chat.type === "group";
+  const showPanel = showGroupSettings && isGroup;
 
   return (
-    <main className="flex-1 flex flex-col min-h-0 bg-slate-900">
-      <ChatHeader
-        chat={chat}
-        currentUserId={user.uid}
-        onBack={onBack}
-        onOpenGroupSettings={
-          isGroup ? () => setShowGroupSettings(true) : undefined
-        }
-      />
-      <MessageList
-        messages={messages}
-        currentUserId={user.uid}
-        loading={loading}
-        chat={chat}
-      />
-      <MessageInput chatId={chat.id} senderId={user.uid} />
+    <main className="flex-1 flex min-h-0 bg-slate-900">
+      <div
+        className={`flex-1 flex-col min-h-0 bg-slate-900 ${
+          showPanel ? "hidden md:flex" : "flex"
+        }`}
+      >
+        <ChatHeader
+          chat={chat}
+          currentUserId={user.uid}
+          onBack={onBack}
+          onOpenGroupSettings={
+            isGroup ? () => setShowGroupSettings(true) : undefined
+          }
+        />
+        <MessageList
+          messages={messages}
+          currentUserId={user.uid}
+          loading={loading}
+          chat={chat}
+        />
+        <MessageInput chatId={chat.id} senderId={user.uid} />
+      </div>
 
-      {showGroupSettings && isGroup && (
-        <EditGroupDialog
+      {showPanel && (
+        <GroupInfoPanel
           chat={chat}
           onClose={() => setShowGroupSettings(false)}
           onLeftGroup={onGroupLeft}
