@@ -4,7 +4,16 @@ import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "../services/firebase";
 import { traduzErroAuth } from "../utils/authErrors";
 
-const AuthContext = createContext(null);
+const defaultAuthValue = {
+  user: null,
+  loading: true,
+  logout: async () => {},
+  refreshUser: () => {},
+  redirectError: null,
+  clearRedirectError: () => {},
+};
+
+const AuthContext = createContext(defaultAuthValue);
 
 function extractUser(firebaseUser) {
   if (!firebaseUser) return null;
@@ -16,47 +25,49 @@ function extractUser(firebaseUser) {
   };
 }
 
+async function syncUserDoc(firebaseUser) {
+  const userRef = doc(db, "users", firebaseUser.uid);
+  await setDoc(
+    userRef,
+    {
+      uid: firebaseUser.uid,
+      email: firebaseUser.email,
+      displayName:
+        firebaseUser.displayName || firebaseUser.email.split("@")[0],
+      photoURL: firebaseUser.photoURL || null,
+      lastSeen: serverTimestamp(),
+    },
+    { merge: true }
+  );
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [redirectError, setRedirectError] = useState(null);
 
   useEffect(() => {
-    let unsubscribe;
-
-    async function initAuth() {
-      try {
-        await getRedirectResult(auth);
-        setRedirectError(null);
-      } catch (err) {
-        setRedirectError(traduzErroAuth(err?.code, err?.message || ""));
-      }
-
-      unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-        if (firebaseUser) {
-          const userRef = doc(db, "users", firebaseUser.uid);
-          await setDoc(
-            userRef,
-            {
-              uid: firebaseUser.uid,
-              email: firebaseUser.email,
-              displayName:
-                firebaseUser.displayName || firebaseUser.email.split("@")[0],
-              photoURL: firebaseUser.photoURL || null,
-              lastSeen: serverTimestamp(),
-            },
-            { merge: true }
-          );
-          setUser(extractUser(firebaseUser));
-        } else {
-          setUser(null);
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        try {
+          await syncUserDoc(firebaseUser);
+        } catch {
+          /* Firestore indisponível — mantém sessão local */
         }
-        setLoading(false);
-      });
-    }
+        setUser(extractUser(firebaseUser));
+      } else {
+        setUser(null);
+      }
+      setLoading(false);
+    });
 
-    initAuth();
-    return () => unsubscribe?.();
+    getRedirectResult(auth)
+      .then(() => setRedirectError(null))
+      .catch((err) => {
+        setRedirectError(traduzErroAuth(err?.code, err?.message || ""));
+      });
+
+    return unsubscribe;
   }, []);
 
   const refreshUser = () => {

@@ -14,7 +14,7 @@ import { traduzErroAuth } from "../utils/authErrors";
 import { useAuth } from "../context/AuthContext";
 
 function LoginPage() {
-  const { user, redirectError, clearRedirectError } = useAuth();
+  const { user, loading, redirectError, clearRedirectError } = useAuth();
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -29,7 +29,7 @@ function LoginPage() {
     }
   }, [redirectError, clearRedirectError]);
 
-  if (user) return <Navigate to="/" replace />;
+  if (!loading && user) return <Navigate to="/" replace />;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
