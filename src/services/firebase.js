@@ -1,10 +1,9 @@
 import { initializeApp, getApp, getApps } from "firebase/app";
 import {
   getAuth,
-  initializeAuth,
+  setPersistence,
   indexedDBLocalPersistence,
   browserLocalPersistence,
-  browserPopupRedirectResolver,
 } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
@@ -19,21 +18,13 @@ const firebaseConfig = {
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-function createAuth() {
-  try {
-    return initializeAuth(app, {
-      persistence: [indexedDBLocalPersistence, browserLocalPersistence],
-      popupRedirectResolver: browserPopupRedirectResolver,
-    });
-  } catch (err) {
-    if (err?.code === "auth/already-initialized") {
-      return getAuth(app);
-    }
-    throw err;
-  }
-}
+export const auth = getAuth(app);
 
-export const auth = createAuth();
+export const authPersistenceReady = setPersistence(
+  auth,
+  indexedDBLocalPersistence
+).catch(() => setPersistence(auth, browserLocalPersistence));
+
 export const db = getFirestore(app);
 
 export default app;

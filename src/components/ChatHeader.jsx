@@ -1,13 +1,25 @@
 import Avatar from "./Avatar";
 
-function ChatHeader({ chat, currentUserId, onOpenGroupSettings }) {
+function ChatHeader({ chat, currentUserId, onBack, onOpenGroupSettings }) {
   const isGroup = chat.type === "group";
+
+  const backButton = onBack ? (
+    <button
+      type="button"
+      onClick={onBack}
+      className="md:hidden p-2 -ml-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition flex-shrink-0"
+      aria-label="Voltar para conversas"
+    >
+      <BackIcon />
+    </button>
+  ) : null;
 
   if (isGroup) {
     const name = chat.name || "Grupo sem nome";
     const memberCount = chat.participants.length;
     return (
-      <header className="px-4 py-3 border-b border-slate-800 flex items-center gap-3 bg-slate-950/50 backdrop-blur">
+      <header className="px-3 md:px-4 py-2 md:py-3 border-b border-slate-800 flex items-center gap-2 md:gap-3 bg-slate-950/95 backdrop-blur shrink-0 pt-[env(safe-area-inset-top)] md:pt-3">
+        {backButton}
         <button
           type="button"
           onClick={onOpenGroupSettings}
@@ -25,7 +37,7 @@ function ChatHeader({ chat, currentUserId, onOpenGroupSettings }) {
         <button
           type="button"
           onClick={onOpenGroupSettings}
-          className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition flex-shrink-0"
+          className="hidden md:flex p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition flex-shrink-0"
           title="Configurações do grupo"
           aria-label="Configurações do grupo"
         >
@@ -40,13 +52,34 @@ function ChatHeader({ chat, currentUserId, onOpenGroupSettings }) {
   const name = otherInfo.displayName || otherInfo.email || "Usuário";
 
   return (
-    <header className="px-4 py-3 border-b border-slate-800 flex items-center gap-3 bg-slate-950/50 backdrop-blur">
+    <header className="px-3 md:px-4 py-2 md:py-3 border-b border-slate-800 flex items-center gap-2 md:gap-3 bg-slate-950/95 backdrop-blur shrink-0 pt-[env(safe-area-inset-top)] md:pt-3">
+      {backButton}
       <Avatar src={otherInfo.photoURL} name={name} size={40} />
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="font-semibold truncate">{name}</p>
-        <p className="text-xs text-slate-500 truncate">{otherInfo.email}</p>
+        <p className="text-xs text-slate-500 truncate hidden sm:block">
+          {otherInfo.email}
+        </p>
       </div>
     </header>
+  );
+}
+
+function BackIcon() {
+  return (
+    <svg
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <line x1="19" y1="12" x2="5" y2="12" />
+      <polyline points="12 19 5 12 12 5" />
+    </svg>
   );
 }
 

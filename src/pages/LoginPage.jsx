@@ -4,8 +4,6 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
-  setPersistence,
-  browserLocalPersistence,
   updateProfile,
 } from "firebase/auth";
 import { auth } from "../services/firebase";
@@ -52,7 +50,6 @@ function LoginPage() {
     setError("");
     setBusy(true);
     try {
-      await setPersistence(auth, browserLocalPersistence);
       if (mode === "login") {
         await signInWithEmailAndPassword(auth, email, password);
       } else {
@@ -72,7 +69,6 @@ function LoginPage() {
     setError("");
     setBusy(true);
     try {
-      await setPersistence(auth, browserLocalPersistence);
       await signInWithPopup(auth, createGoogleProvider());
     } catch (err) {
       setError(traduzErroAuth(err?.code, err?.message || ""));

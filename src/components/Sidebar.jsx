@@ -6,7 +6,14 @@ import ChatListItem from "./ChatListItem";
 import NewChatDialog from "./NewChatDialog";
 import NewGroupDialog from "./NewGroupDialog";
 
-function Sidebar({ chats, loading, unreadChatIds, selectedChatId, onSelectChatId }) {
+function Sidebar({
+  chats,
+  loading,
+  unreadChatIds,
+  selectedChatId,
+  onSelectChatId,
+  className = "",
+}) {
   const { user } = useAuth();
   const [search, setSearch] = useState("");
   const [showNewChat, setShowNewChat] = useState(false);
@@ -40,10 +47,28 @@ function Sidebar({ chats, loading, unreadChatIds, selectedChatId, onSelectChatId
   }, [chats, user?.uid]);
 
   return (
-    <aside className="w-80 bg-slate-950 border-r border-slate-800 flex flex-col">
+    <aside
+      className={`bg-slate-950 border-r border-slate-800 flex flex-col min-h-0 shrink-0 ${className}`}
+    >
+      <header className="md:hidden flex items-center justify-between px-4 py-3 border-b border-slate-800 bg-slate-950 pt-[env(safe-area-inset-top)]">
+        <h1 className="text-xl font-semibold">Conversas</h1>
+        <Link
+          to="/profile"
+          className="p-2 hover:bg-slate-800 rounded-full transition"
+          title="Meu perfil"
+          aria-label="Meu perfil"
+        >
+          <Avatar
+            src={user?.photoURL}
+            name={user?.displayName || user?.email}
+            size={36}
+          />
+        </Link>
+      </header>
+
       <Link
         to="/profile"
-        className="p-4 border-b border-slate-800 flex items-center gap-3 hover:bg-slate-900 transition"
+        className="hidden md:flex p-4 border-b border-slate-800 items-center gap-3 hover:bg-slate-900 transition"
         title="Abrir perfil"
       >
         <Avatar
@@ -94,7 +119,7 @@ function Sidebar({ chats, loading, unreadChatIds, selectedChatId, onSelectChatId
         ))}
       </div>
 
-      <div className="m-3 grid grid-cols-2 gap-2">
+      <div className="m-3 grid grid-cols-2 gap-2 pb-[env(safe-area-inset-bottom)] md:pb-3">
         <button
           onClick={() => setShowNewChat(true)}
           className="py-2.5 bg-sky-500 hover:bg-sky-600 text-white font-medium rounded-lg transition flex items-center justify-center gap-2"

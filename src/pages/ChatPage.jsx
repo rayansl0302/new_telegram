@@ -41,19 +41,29 @@ function ChatPage() {
     selectedChatId,
   });
 
+  const showChatOnMobile = Boolean(selectedChatId);
+
   return (
-    <div className="h-screen flex bg-slate-900 text-white overflow-hidden">
+    <div className="h-dvh flex bg-slate-900 text-white overflow-hidden">
       <Sidebar
         chats={chats}
         loading={loading}
         unreadChatIds={unreadChatIds}
         selectedChatId={selectedChatId}
         onSelectChatId={setSelectedChatId}
+        className={`w-full md:w-80 ${showChatOnMobile ? "hidden md:flex" : "flex"}`}
       />
-      <ChatWindow
-        chat={selectedChat}
-        onGroupLeft={() => setSelectedChatId(null)}
-      />
+      <div
+        className={`flex-1 flex flex-col min-w-0 min-h-0 ${
+          showChatOnMobile ? "flex" : "hidden md:flex"
+        }`}
+      >
+        <ChatWindow
+          chat={selectedChat}
+          onBack={() => setSelectedChatId(null)}
+          onGroupLeft={() => setSelectedChatId(null)}
+        />
+      </div>
     </div>
   );
 }

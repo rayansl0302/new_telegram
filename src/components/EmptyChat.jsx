@@ -1,6 +1,6 @@
 function EmptyChat() {
   return (
-    <main className="flex-1 flex items-center justify-center bg-slate-900">
+    <main className="flex-1 flex items-center justify-center bg-slate-900 min-h-0">
       <div className="text-center max-w-sm px-6">
         <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-slate-800 flex items-center justify-center">
           <ChatIcon />

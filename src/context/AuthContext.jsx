@@ -1,8 +1,10 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { getRedirectResult, onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
-import { auth, db } from "../services/firebase";
+import { auth, authPersistenceReady, db } from "../services/firebase";
 import { traduzErroAuth } from "../utils/authErrors";
+
+const LAST_SEEN_INTERVAL_MS = 5 * 60 * 1000;
 
 const defaultAuthValue = {
   user: null,
@@ -41,34 +43,40 @@ async function syncUserDoc(firebaseUser) {
   );
 }
 
-async function applySession(firebaseUser) {
-  if (!firebaseUser) return null;
-  try {
-    await syncUserDoc(firebaseUser);
-  } catch {
-    /* offline — mantém sessão local */
-  }
-  return extractUser(firebaseUser);
-}
-
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [redirectError, setRedirectError] = useState(null);
+  const authReadyRef = useRef(false);
+  const lastSyncedUidRef = useRef(null);
+  const lastSeenSyncRef = useRef(0);
+
+  const queueUserDocSync = (firebaseUser) => {
+    const now = Date.now();
+    const isNewUser = lastSyncedUidRef.current !== firebaseUser.uid;
+    const shouldUpdateLastSeen =
+      isNewUser || now - lastSeenSyncRef.current > LAST_SEEN_INTERVAL_MS;
+
+    if (!shouldUpdateLastSeen) return;
+
+    lastSyncedUidRef.current = firebaseUser.uid;
+    lastSeenSyncRef.current = now;
+
+    syncUserDoc(firebaseUser).catch(() => {});
+  };
 
   useEffect(() => {
     let cancelled = false;
-    let unsubscribe = () => {};
 
     async function init() {
+      await authPersistenceReady;
+
       try {
         const result = await getRedirectResult(auth);
         if (!cancelled && result?.user) {
-          const sessionUser = await applySession(result.user);
-          if (sessionUser) {
-            setUser(sessionUser);
-            setRedirectError(null);
-          }
+          setUser(extractUser(result.user));
+          setRedirectError(null);
+          queueUserDocSync(result.user);
         }
       } catch (err) {
         if (!cancelled) {
@@ -77,29 +85,37 @@ export function AuthProvider({ children }) {
       }
 
       await auth.authStateReady();
-
       if (cancelled) return;
 
+      authReadyRef.current = true;
+
       if (auth.currentUser) {
-        const sessionUser = await applySession(auth.currentUser);
-        if (sessionUser) setUser(sessionUser);
+        setUser(extractUser(auth.currentUser));
+        queueUserDocSync(auth.currentUser);
       }
 
       setLoading(false);
-
-      unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-        if (cancelled) return;
-        if (firebaseUser) {
-          const sessionUser = await applySession(firebaseUser);
-          if (sessionUser) {
-            setUser(sessionUser);
-            setRedirectError(null);
-          }
-        } else {
-          setUser(null);
-        }
-      });
     }
+
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      if (cancelled) return;
+
+      if (firebaseUser) {
+        setUser(extractUser(firebaseUser));
+        setRedirectError(null);
+        queueUserDocSync(firebaseUser);
+        if (!authReadyRef.current) {
+          authReadyRef.current = true;
+          setLoading(false);
+        }
+        return;
+      }
+
+      if (!authReadyRef.current) return;
+
+      setUser(null);
+      lastSyncedUidRef.current = null;
+    });
 
     init();
 
@@ -113,7 +129,11 @@ export function AuthProvider({ children }) {
     setUser(extractUser(auth.currentUser));
   };
 
-  const logout = () => signOut(auth);
+  const logout = async () => {
+    lastSyncedUidRef.current = null;
+    lastSeenSyncRef.current = 0;
+    await signOut(auth);
+  };
 
   const clearRedirectError = () => setRedirectError(null);
 

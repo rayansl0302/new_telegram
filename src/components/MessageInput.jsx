@@ -45,7 +45,7 @@ function MessageInput({ chatId, senderId }) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="p-3 border-t border-slate-800 bg-slate-950/50 backdrop-blur flex items-center gap-2"
+      className="p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-slate-800 bg-slate-950/95 backdrop-blur flex items-center gap-2 shrink-0"
     >
       <button
         type="button"
