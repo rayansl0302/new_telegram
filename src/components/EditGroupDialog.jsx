@@ -4,6 +4,8 @@ import {
   updateGroupInfo,
   addGroupMember,
   removeGroupMember,
+  promoteToAdmin,
+  demoteFromAdmin,
   findUserByEmail,
 } from "../services/chatService";
 import { uploadGroupPhoto } from "../services/storageService";
@@ -14,6 +16,7 @@ function EditGroupDialog({ chat, onClose, onLeftGroup }) {
   const fileRef = useRef(null);
 
   const isAdmin = chat.admins?.includes(user.uid) ?? false;
+  const adminCount = chat.admins?.length || 0;
 
   const [name, setName] = useState(chat.name || "");
   const [photoURL, setPhotoURL] = useState(chat.photoURL || "");
@@ -24,7 +27,8 @@ function EditGroupDialog({ chat, onClose, onLeftGroup }) {
   const [success, setSuccess] = useState("");
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [removingUid, setRemovingUid] = useState(null);
+  // pendingAction: { uid, type: "remove" | "promote" | "demote" }
+  const [pendingAction, setPendingAction] = useState(null);
 
   const members = (chat.participants || []).map((uid) => ({
     uid,
@@ -36,9 +40,14 @@ function EditGroupDialog({ chat, onClose, onLeftGroup }) {
     (name.trim() !== (chat.name || "").trim() ||
       photoURL !== (chat.photoURL || ""));
 
-  const handleSaveInfo = async () => {
+  const clearMessages = () => {
     setError("");
     setSuccess("");
+    setEmailError("");
+  };
+
+  const handleSaveInfo = async () => {
+    clearMessages();
     if (!name.trim()) {
       setError("O nome do grupo não pode ficar vazio");
       return;
@@ -65,8 +74,7 @@ function EditGroupDialog({ chat, onClose, onLeftGroup }) {
       setError("Apenas imagens são suportadas");
       return;
     }
-    setError("");
-    setSuccess("");
+    clearMessages();
     setUploading(true);
     try {
       const url = await uploadGroupPhoto(file);
@@ -81,8 +89,7 @@ function EditGroupDialog({ chat, onClose, onLeftGroup }) {
   };
 
   const handleAddByEmail = async () => {
-    setEmailError("");
-    setSuccess("");
+    clearMessages();
     const email = emailInput.trim().toLowerCase();
     if (!email) return;
     if (email === user.email.toLowerCase()) {
@@ -116,22 +123,65 @@ function EditGroupDialog({ chat, onClose, onLeftGroup }) {
   };
 
   const handleRemoveMember = async (uid) => {
-    setError("");
-    setSuccess("");
-    setRemovingUid(uid);
+    const isSelf = uid === user.uid;
+    const target = members.find((m) => m.uid === uid);
+    const targetName = target?.displayName || target?.email || "este membro";
+
+    const confirmMsg = isSelf
+      ? "Tem certeza que quer sair deste grupo?"
+      : `Remover ${targetName} do grupo?`;
+    if (!window.confirm(confirmMsg)) return;
+
+    clearMessages();
+    setPendingAction({ uid, type: "remove" });
     try {
       await removeGroupMember(chat.id, uid);
-      if (uid === user.uid) {
+      if (isSelf) {
         onLeftGroup?.();
         onClose();
         return;
       }
-      setSuccess("Membro removido do grupo");
+      setSuccess(`${targetName} removido do grupo`);
     } catch (err) {
       console.error(err);
       setError(err.message || "Erro ao remover membro");
     } finally {
-      setRemovingUid(null);
+      setPendingAction(null);
+    }
+  };
+
+  const handlePromote = async (uid) => {
+    clearMessages();
+    setPendingAction({ uid, type: "promote" });
+    try {
+      await promoteToAdmin(chat.id, uid);
+      const target = members.find((m) => m.uid === uid);
+      setSuccess(
+        `${target?.displayName || target?.email || "Membro"} agora é admin`
+      );
+    } catch (err) {
+      console.error(err);
+      setError(err.message || "Erro ao promover");
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  const handleDemote = async (uid) => {
+    const target = members.find((m) => m.uid === uid);
+    const targetName = target?.displayName || target?.email || "este admin";
+    if (!window.confirm(`Remover ${targetName} como administrador?`)) return;
+
+    clearMessages();
+    setPendingAction({ uid, type: "demote" });
+    try {
+      await demoteFromAdmin(chat.id, uid);
+      setSuccess(`${targetName} não é mais admin`);
+    } catch (err) {
+      console.error(err);
+      setError(err.message || "Erro ao remover admin");
+    } finally {
+      setPendingAction(null);
     }
   };
 
@@ -141,8 +191,6 @@ function EditGroupDialog({ chat, onClose, onLeftGroup }) {
       handleAddByEmail();
     }
   };
-
-  const canRemoveOthers = isAdmin && members.length > 2;
 
   return (
     <div
@@ -162,7 +210,7 @@ function EditGroupDialog({ chat, onClose, onLeftGroup }) {
         <p className="text-sm text-slate-400 mb-4">
           {isAdmin
             ? "Altere nome, foto e gerencie os membros."
-            : "Visualize os dados do grupo."}
+            : "Visualize os dados do grupo. Apenas admins podem editar."}
         </p>
 
         <div className="flex-1 overflow-y-auto space-y-4 -mx-1 px-1">
@@ -249,22 +297,29 @@ function EditGroupDialog({ chat, onClose, onLeftGroup }) {
           )}
 
           <div>
-            <p className="text-sm text-slate-400 mb-2">
-              Membros ({members.length})
-            </p>
-            <div className="bg-slate-900/50 border border-slate-700 rounded-lg divide-y divide-slate-800 max-h-56 overflow-y-auto">
+            <div className="flex items-baseline justify-between mb-2">
+              <p className="text-sm text-slate-400">
+                Membros ({members.length})
+              </p>
+              <p className="text-xs text-slate-500">
+                {adminCount} admin{adminCount !== 1 ? "s" : ""}
+              </p>
+            </div>
+            <div className="bg-slate-900/50 border border-slate-700 rounded-lg divide-y divide-slate-800 max-h-72 overflow-y-auto">
               {members.map((m) => {
                 const isSelf = m.uid === user.uid;
                 const isMemberAdmin = chat.admins?.includes(m.uid);
-                const showRemove =
-                  (isAdmin && !isSelf && canRemoveOthers) ||
-                  (isSelf && members.length > 2);
-                const removing = removingUid === m.uid;
+                const pending = pendingAction?.uid === m.uid;
+                const pendingType = pending ? pendingAction.type : null;
+
+                const canManage = isAdmin && !isSelf;
+                const showLeave = isSelf && members.length > 2;
+                const showRemove = canManage && members.length > 2;
 
                 return (
                   <div
                     key={m.uid}
-                    className="flex items-center gap-3 p-3"
+                    className="flex items-center gap-2 p-3"
                   >
                     <Avatar
                       src={m.photoURL}
@@ -272,40 +327,92 @@ function EditGroupDialog({ chat, onClose, onLeftGroup }) {
                       size={36}
                     />
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">
-                        {m.displayName || m.email}
+                      <p className="font-medium truncate flex items-center gap-1.5">
+                        <span className="truncate">
+                          {m.displayName || m.email}
+                        </span>
                         {isSelf && (
-                          <span className="text-slate-500 font-normal">
-                            {" "}
+                          <span className="text-slate-500 font-normal text-xs flex-shrink-0">
                             (você)
                           </span>
                         )}
+                        {isMemberAdmin && <AdminBadge />}
                       </p>
                       <p className="text-xs text-slate-500 truncate">
                         {m.email}
-                        {isMemberAdmin && " · Admin"}
                       </p>
                     </div>
-                    {showRemove && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveMember(m.uid)}
-                        disabled={removing || removingUid !== null}
-                        className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition disabled:opacity-50"
-                        title={isSelf ? "Sair do grupo" : "Remover membro"}
-                        aria-label={
-                          isSelf ? "Sair do grupo" : "Remover membro"
-                        }
-                      >
-                        {removing ? (
-                          <SpinnerIcon />
-                        ) : isSelf ? (
-                          <LeaveIcon />
+                    <div className="flex items-center gap-0.5 flex-shrink-0">
+                      {canManage && (
+                        isMemberAdmin ? (
+                          <button
+                            type="button"
+                            onClick={() => handleDemote(m.uid)}
+                            disabled={pending || adminCount <= 1}
+                            className="p-2 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 rounded-lg transition disabled:opacity-30 disabled:cursor-not-allowed"
+                            title={
+                              adminCount <= 1
+                                ? "Não há outros admins"
+                                : "Remover como admin"
+                            }
+                            aria-label="Remover como admin"
+                          >
+                            {pendingType === "demote" ? (
+                              <SpinnerIcon />
+                            ) : (
+                              <ShieldFilledIcon />
+                            )}
+                          </button>
                         ) : (
-                          <RemoveIcon />
-                        )}
-                      </button>
-                    )}
+                          <button
+                            type="button"
+                            onClick={() => handlePromote(m.uid)}
+                            disabled={pending}
+                            className="p-2 text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 rounded-lg transition disabled:opacity-50"
+                            title="Tornar admin"
+                            aria-label="Tornar admin"
+                          >
+                            {pendingType === "promote" ? (
+                              <SpinnerIcon />
+                            ) : (
+                              <ShieldIcon />
+                            )}
+                          </button>
+                        )
+                      )}
+                      {showRemove && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveMember(m.uid)}
+                          disabled={pending}
+                          className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition disabled:opacity-50"
+                          title="Remover do grupo"
+                          aria-label="Remover do grupo"
+                        >
+                          {pendingType === "remove" ? (
+                            <SpinnerIcon />
+                          ) : (
+                            <RemoveIcon />
+                          )}
+                        </button>
+                      )}
+                      {showLeave && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveMember(m.uid)}
+                          disabled={pending}
+                          className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition disabled:opacity-50"
+                          title="Sair do grupo"
+                          aria-label="Sair do grupo"
+                        >
+                          {pendingType === "remove" ? (
+                            <SpinnerIcon />
+                          ) : (
+                            <LeaveIcon />
+                          )}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -338,6 +445,33 @@ function EditGroupDialog({ chat, onClose, onLeftGroup }) {
         </button>
       </div>
     </div>
+  );
+}
+
+function AdminBadge() {
+  return (
+    <span
+      className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 flex-shrink-0"
+      title="Administrador"
+    >
+      Admin
+    </span>
+  );
+}
+
+function ShieldIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+    </svg>
+  );
+}
+
+function ShieldFilledIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+    </svg>
   );
 }
 

@@ -29,7 +29,9 @@ function MessageBubble({ message, isOwn, isGroup, senderInfo }) {
           </a>
         )}
         {message.text && (
-          <p className="whitespace-pre-wrap break-words">{message.text}</p>
+          <p className="whitespace-pre-wrap break-words">
+            {renderTextWithLinks(message.text, isOwn)}
+          </p>
         )}
         <p
           className={`text-[10px] mt-1 text-right ${
@@ -41,6 +43,43 @@ function MessageBubble({ message, isOwn, isGroup, senderInfo }) {
       </div>
     </div>
   );
+}
+
+// Regex captura http(s)://... e também www....
+const URL_REGEX = /((?:https?:\/\/|www\.)[^\s<>"]+)/gi;
+
+// Pontuação que pode "vazar" pro final da URL e queremos manter fora do link
+const TRAILING_PUNCT = /[.,!?;:)\]}>'"`]+$/;
+
+function renderTextWithLinks(text, isOwn) {
+  const parts = text.split(URL_REGEX);
+  return parts.map((part, i) => {
+    if (i % 2 === 0) return part;
+
+    // Separa pontuação final (ex: "https://foo.com." → URL "https://foo.com" + "." de volta no texto)
+    const trailingMatch = part.match(TRAILING_PUNCT);
+    const trailing = trailingMatch ? trailingMatch[0] : "";
+    const cleanUrl = trailing ? part.slice(0, -trailing.length) : part;
+    const href = cleanUrl.startsWith("http") ? cleanUrl : `https://${cleanUrl}`;
+
+    return (
+      <span key={i}>
+        <a
+          href={href}
+          target="_blank"
+          rel="noreferrer noopener"
+          className={`underline break-all ${
+            isOwn
+              ? "text-sky-100 hover:text-white"
+              : "text-sky-400 hover:text-sky-300"
+          }`}
+        >
+          {cleanUrl}
+        </a>
+        {trailing}
+      </span>
+    );
+  });
 }
 
 const SENDER_COLORS = [

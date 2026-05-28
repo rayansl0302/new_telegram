@@ -116,18 +116,72 @@ export const removeGroupMember = async (chatId, uid) => {
   if (!snap.exists() || snap.data().type !== "group") {
     throw new Error("Grupo não encontrado");
   }
-  const participants = snap.data().participants || [];
+  const data = snap.data();
+  const participants = data.participants || [];
+  const admins = data.admins || [];
+
   if (!participants.includes(uid)) {
     throw new Error("Usuário não é membro do grupo");
   }
   if (participants.length <= 2) {
     throw new Error("O grupo precisa ter pelo menos 2 membros");
   }
+
+  // Se quem está saindo/sendo removido é o único administrador,
+  // exigir que promova alguém antes.
+  const isAdmin = admins.includes(uid);
+  const otherAdminsExist = admins.some((a) => a !== uid);
+  if (isAdmin && !otherAdminsExist) {
+    throw new Error(
+      "Este é o único administrador. Promova outro membro a admin antes."
+    );
+  }
+
   await updateDoc(chatRef, {
     participants: arrayRemove(uid),
     admins: arrayRemove(uid),
     [`participantInfo.${uid}`]: deleteField(),
     [`lastRead.${uid}`]: deleteField(),
+    updatedAt: serverTimestamp(),
+  });
+};
+
+export const promoteToAdmin = async (chatId, uid) => {
+  const chatRef = doc(db, "chats", chatId);
+  const snap = await getDoc(chatRef);
+  if (!snap.exists() || snap.data().type !== "group") {
+    throw new Error("Grupo não encontrado");
+  }
+  const data = snap.data();
+  if (!data.participants?.includes(uid)) {
+    throw new Error("Usuário não é membro do grupo");
+  }
+  if (data.admins?.includes(uid)) {
+    throw new Error("Usuário já é administrador");
+  }
+  await updateDoc(chatRef, {
+    admins: arrayUnion(uid),
+    updatedAt: serverTimestamp(),
+  });
+};
+
+export const demoteFromAdmin = async (chatId, uid) => {
+  const chatRef = doc(db, "chats", chatId);
+  const snap = await getDoc(chatRef);
+  if (!snap.exists() || snap.data().type !== "group") {
+    throw new Error("Grupo não encontrado");
+  }
+  const admins = snap.data().admins || [];
+  if (!admins.includes(uid)) {
+    throw new Error("Usuário não é administrador");
+  }
+  if (admins.length <= 1) {
+    throw new Error(
+      "Não é possível remover o último administrador. Promova outro membro antes."
+    );
+  }
+  await updateDoc(chatRef, {
+    admins: arrayRemove(uid),
     updatedAt: serverTimestamp(),
   });
 };
