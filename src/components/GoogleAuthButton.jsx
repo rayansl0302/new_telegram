@@ -1,6 +1,5 @@
 import { useEffect, useRef, useCallback } from "react";
-import { GoogleAuthProvider, signInWithCredential } from "firebase/auth";
-import { auth } from "../services/firebase";
+import { signInWithGoogleIdToken } from "../services/googleAuth";
 import {
   getGoogleClientId,
   loadGoogleIdentityScript,
@@ -19,10 +18,11 @@ function GoogleAuthButton({ disabled, onError, onBusy }) {
       }
       onBusy?.(true);
       try {
-        const credential = GoogleAuthProvider.credential(response.credential);
-        await signInWithCredential(auth, credential);
+        await signInWithGoogleIdToken(response.credential);
       } catch (err) {
-        onError?.(traduzErroAuth(err?.code, err?.message || ""));
+        onError?.(
+          traduzErroAuth(err?.code, err?.message || "", { provider: "google" })
+        );
       } finally {
         onBusy?.(false);
       }
@@ -46,6 +46,7 @@ function GoogleAuthButton({ disabled, onError, onBusy }) {
           cancel_on_tap_outside: true,
           context: "signin",
           itp_support: true,
+          use_fedcm_for_prompt: false,
         });
 
         window.google.accounts.id.renderButton(containerRef.current, {

@@ -14,6 +14,7 @@ import { shouldUseGoogleIdentity } from "../utils/platform";
 import { traduzErroAuth } from "../utils/authErrors";
 import { useAuth } from "../context/AuthContext";
 import GoogleAuthButton from "../components/GoogleAuthButton";
+import AuthOriginHint from "../components/AuthOriginHint";
 
 function LoginPage() {
   const { user, loading, redirectError, clearRedirectError } = useAuth();
@@ -140,11 +141,16 @@ function LoginPage() {
         </div>
 
         {useGoogleIdentity ? (
-          <GoogleAuthButton
-            disabled={busy}
-            onError={handleAuthError}
-            onBusy={setBusy}
-          />
+          <>
+            <GoogleAuthButton
+              disabled={busy}
+              onError={handleAuthError}
+              onBusy={setBusy}
+            />
+            <div className="mt-3">
+              <AuthOriginHint />
+            </div>
+          </>
         ) : (
           <button
             type="button"

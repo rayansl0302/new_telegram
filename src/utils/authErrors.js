@@ -1,4 +1,10 @@
-export function traduzErroAuth(code, message = "") {
+export function traduzErroAuth(code, message = "", context = {}) {
+  const isGoogle = context.provider === "google";
+
+  if (code === "auth/invalid-credential" && isGoogle) {
+    return "O Google autenticou, mas o Firebase recusou o token. Use o ID do cliente Web do Firebase (Authentication → Google), no mesmo projeto das variáveis VITE_FIREBASE_*.";
+  }
+
   const map = {
     "auth/invalid-credential": "E-mail ou senha incorretos",
     "auth/user-not-found": "Usuário não encontrado",
@@ -11,7 +17,10 @@ export function traduzErroAuth(code, message = "") {
     "auth/cancelled-popup-request": "Login cancelado",
     "auth/network-request-failed": "Sem conexão com a internet",
     "auth/unauthorized-domain": `Domínio não autorizado no Firebase: ${typeof window !== "undefined" ? window.location.hostname : ""}`,
-    "auth/operation-not-allowed": "Login com Google não está habilitado no Firebase Console",
+    "auth/operation-not-allowed":
+      isGoogle
+        ? "Login com Google não está habilitado no Firebase Console"
+        : "Método de login não habilitado no Firebase Console",
     "auth/operation-not-supported-in-this-environment":
       "Login com Google não suportado neste navegador. Use Safari ou e-mail/senha.",
     "auth/internal-error": "Erro interno do Firebase. Tente novamente ou use e-mail/senha.",
