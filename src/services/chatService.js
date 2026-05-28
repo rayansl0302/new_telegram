@@ -9,6 +9,9 @@ import {
   where,
   serverTimestamp,
   updateDoc,
+  arrayUnion,
+  arrayRemove,
+  deleteField,
 } from "firebase/firestore";
 import { db } from "./firebase";
 
@@ -78,6 +81,55 @@ export const createGroup = async (currentUser, { name, photoURL, members }) => {
     updatedAt: serverTimestamp(),
   });
   return newGroupRef.id;
+};
+
+export const updateGroupInfo = async (chatId, { name, photoURL }) => {
+  const updates = { updatedAt: serverTimestamp() };
+  if (name !== undefined) updates.name = name.trim();
+  if (photoURL !== undefined) updates.photoURL = photoURL || null;
+  await updateDoc(doc(db, "chats", chatId), updates);
+};
+
+export const addGroupMember = async (chatId, member) => {
+  const chatRef = doc(db, "chats", chatId);
+  const snap = await getDoc(chatRef);
+  if (!snap.exists() || snap.data().type !== "group") {
+    throw new Error("Grupo não encontrado");
+  }
+  if (snap.data().participants?.includes(member.uid)) {
+    throw new Error("Usuário já é membro do grupo");
+  }
+  await updateDoc(chatRef, {
+    participants: arrayUnion(member.uid),
+    [`participantInfo.${member.uid}`]: {
+      displayName: member.displayName || member.email,
+      photoURL: member.photoURL || null,
+      email: member.email,
+    },
+    updatedAt: serverTimestamp(),
+  });
+};
+
+export const removeGroupMember = async (chatId, uid) => {
+  const chatRef = doc(db, "chats", chatId);
+  const snap = await getDoc(chatRef);
+  if (!snap.exists() || snap.data().type !== "group") {
+    throw new Error("Grupo não encontrado");
+  }
+  const participants = snap.data().participants || [];
+  if (!participants.includes(uid)) {
+    throw new Error("Usuário não é membro do grupo");
+  }
+  if (participants.length <= 2) {
+    throw new Error("O grupo precisa ter pelo menos 2 membros");
+  }
+  await updateDoc(chatRef, {
+    participants: arrayRemove(uid),
+    admins: arrayRemove(uid),
+    [`participantInfo.${uid}`]: deleteField(),
+    [`lastRead.${uid}`]: deleteField(),
+    updatedAt: serverTimestamp(),
+  });
 };
 
 export const sendMessage = async (chatId, senderId, { text, imageUrl }) => {

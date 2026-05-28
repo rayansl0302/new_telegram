@@ -50,7 +50,10 @@ function ChatPage() {
         selectedChatId={selectedChatId}
         onSelectChatId={setSelectedChatId}
       />
-      <ChatWindow chat={selectedChat} />
+      <ChatWindow
+        chat={selectedChat}
+        onGroupLeft={() => setSelectedChatId(null)}
+      />
     </div>
   );
 }
