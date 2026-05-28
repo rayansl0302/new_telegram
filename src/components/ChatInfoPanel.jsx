@@ -11,7 +11,55 @@ import {
 import { uploadGroupPhoto } from "../services/storageService";
 import Avatar from "./Avatar";
 
-function GroupInfoPanel({ chat, onClose, onLeftGroup }) {
+function ChatInfoPanel({ chat, messages, onClose, onLeftGroup }) {
+  const isGroup = chat.type === "group";
+  return isGroup ? (
+    <GroupView
+      chat={chat}
+      messages={messages}
+      onClose={onClose}
+      onLeftGroup={onLeftGroup}
+    />
+  ) : (
+    <ContactView chat={chat} messages={messages} onClose={onClose} />
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────
+// ContactView (chat direto)
+// ───────────────────────────────────────────────────────────────────
+
+function ContactView({ chat, messages, onClose }) {
+  const { user } = useAuth();
+  const otherId = chat.participants.find((p) => p !== user.uid);
+  const info = chat.participantInfo?.[otherId] || {};
+  const name = info.displayName || info.email || "Usuário";
+
+  return (
+    <PanelShell>
+      <PanelHeader title="Dados do contato" onClose={onClose} />
+      <div className="flex-1 overflow-y-auto">
+        <section className="p-6 border-b border-slate-800 flex flex-col items-center text-center">
+          <Avatar src={info.photoURL} name={name} size={140} />
+          <h3 className="text-2xl font-semibold mt-4 truncate max-w-full px-2">
+            {name}
+          </h3>
+          <p className="text-sm text-slate-400 mt-1 truncate max-w-full px-2">
+            {info.email}
+          </p>
+        </section>
+
+        <MediaSection messages={messages} />
+      </div>
+    </PanelShell>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────
+// GroupView (grupo)
+// ───────────────────────────────────────────────────────────────────
+
+function GroupView({ chat, messages, onClose, onLeftGroup }) {
   const { user } = useAuth();
   const fileRef = useRef(null);
 
@@ -27,7 +75,6 @@ function GroupInfoPanel({ chat, onClose, onLeftGroup }) {
   const [success, setSuccess] = useState("");
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
-  // pendingAction: { uid, type: "remove" | "promote" | "demote" }
   const [pendingAction, setPendingAction] = useState(null);
 
   const members = (chat.participants || []).map((uid) => ({
@@ -192,18 +239,8 @@ function GroupInfoPanel({ chat, onClose, onLeftGroup }) {
   const pendingSelf = pendingAction?.uid === user.uid;
 
   return (
-    <aside className="w-full md:w-96 lg:w-[420px] bg-slate-900 border-l border-slate-800 flex flex-col min-h-0 shrink-0">
-      <header className="px-3 md:px-4 py-2.5 md:py-3 border-b border-slate-800 flex items-center gap-2 md:gap-3 bg-slate-950/95 backdrop-blur shrink-0">
-        <button
-          type="button"
-          onClick={onClose}
-          className="p-2 -ml-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition flex-shrink-0"
-          aria-label="Fechar painel"
-        >
-          <CloseIcon />
-        </button>
-        <h2 className="text-lg font-semibold">Dados do grupo</h2>
-      </header>
+    <PanelShell>
+      <PanelHeader title="Dados do grupo" onClose={onClose} />
 
       <div className="flex-1 overflow-y-auto">
         <section className="p-6 border-b border-slate-800 flex flex-col items-center text-center">
@@ -294,7 +331,7 @@ function GroupInfoPanel({ chat, onClose, onLeftGroup }) {
           </section>
         )}
 
-        <section className="p-4">
+        <section className="p-4 border-b border-slate-800">
           <div className="flex items-baseline justify-between mb-2">
             <p className="text-sm text-slate-400">
               {members.length} membros
@@ -399,6 +436,8 @@ function GroupInfoPanel({ chat, onClose, onLeftGroup }) {
           </div>
         </section>
 
+        <MediaSection messages={messages} />
+
         {error && (
           <p className="mx-4 mb-4 text-red-400 text-sm bg-red-500/10 border border-red-500/30 rounded-lg p-3">
             {error}
@@ -423,7 +462,80 @@ function GroupInfoPanel({ chat, onClose, onLeftGroup }) {
           </button>
         </div>
       )}
+    </PanelShell>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────
+// Subcomponentes compartilhados
+// ───────────────────────────────────────────────────────────────────
+
+function PanelShell({ children }) {
+  return (
+    <aside className="w-full md:w-96 lg:w-[420px] bg-slate-900 border-l border-slate-800 flex flex-col min-h-0 shrink-0">
+      {children}
     </aside>
+  );
+}
+
+function PanelHeader({ title, onClose }) {
+  return (
+    <header className="px-3 md:px-4 py-2.5 md:py-3 border-b border-slate-800 flex items-center gap-2 md:gap-3 bg-slate-950/95 backdrop-blur shrink-0">
+      <button
+        type="button"
+        onClick={onClose}
+        className="p-2 -ml-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition flex-shrink-0"
+        aria-label="Fechar painel"
+      >
+        <CloseIcon />
+      </button>
+      <h2 className="text-lg font-semibold">{title}</h2>
+    </header>
+  );
+}
+
+function MediaSection({ messages }) {
+  const media = (messages || [])
+    .filter((m) => m.imageUrl)
+    .slice()
+    .reverse(); // mais recentes primeiro
+
+  return (
+    <section className="p-4">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-sm text-slate-400 flex items-center gap-2">
+          <MediaIcon />
+          Mídia compartilhada
+        </p>
+        {media.length > 0 && (
+          <p className="text-xs text-slate-500">{media.length}</p>
+        )}
+      </div>
+      {media.length === 0 ? (
+        <p className="text-xs text-slate-500 italic">
+          Nenhuma imagem enviada ainda.
+        </p>
+      ) : (
+        <div className="grid grid-cols-3 gap-1">
+          {media.map((m) => (
+            <a
+              key={m.id}
+              href={m.imageUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="aspect-square overflow-hidden rounded bg-slate-800 group block"
+            >
+              <img
+                src={m.imageUrl}
+                alt=""
+                loading="lazy"
+                className="w-full h-full object-cover group-hover:scale-110 transition"
+              />
+            </a>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -438,11 +550,25 @@ function AdminBadge() {
   );
 }
 
+// ───────────────────────────────────────────────────────────────────
+// Icons
+// ───────────────────────────────────────────────────────────────────
+
 function CloseIcon() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <line x1="18" y1="6" x2="6" y2="18" />
       <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  );
+}
+
+function MediaIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <polyline points="21 15 16 10 5 21" />
     </svg>
   );
 }
@@ -515,4 +641,4 @@ function SpinnerIcon() {
   );
 }
 
-export default GroupInfoPanel;
+export default ChatInfoPanel;
