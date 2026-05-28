@@ -9,12 +9,19 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: "autoUpdate",
+      manifestFilename: "site.webmanifest",
       includeAssets: [
+        "favicon.ico",
+        "favicon-16x16.png",
+        "favicon-32x32.png",
         "favicon.png",
         "apple-touch-icon.png",
+        "android-chrome-192x192.png",
+        "android-chrome-512x512.png",
         "mask-icon.svg",
         "pwa-192x192.png",
         "pwa-512x512.png",
+        "site.webmanifest",
       ],
       manifest: {
         name: "Telegram Clone",
@@ -30,17 +37,17 @@ export default defineConfig({
         categories: ["social", "communication"],
         icons: [
           {
-            src: "pwa-192x192.png",
+            src: "android-chrome-192x192.png",
             sizes: "192x192",
             type: "image/png",
           },
           {
-            src: "pwa-512x512.png",
+            src: "android-chrome-512x512.png",
             sizes: "512x512",
             type: "image/png",
           },
           {
-            src: "pwa-512x512.png",
+            src: "android-chrome-512x512.png",
             sizes: "512x512",
             type: "image/png",
             purpose: "maskable",
