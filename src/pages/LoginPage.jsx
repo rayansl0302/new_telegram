@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import {
   signInWithEmailAndPassword,
@@ -10,16 +10,24 @@ import {
 import { auth } from "../services/firebase";
 import { createGoogleProvider } from "../services/googleAuth";
 import { shouldUseGoogleRedirect } from "../utils/platform";
+import { traduzErroAuth } from "../utils/authErrors";
 import { useAuth } from "../context/AuthContext";
 
 function LoginPage() {
-  const { user } = useAuth();
+  const { user, redirectError, clearRedirectError } = useAuth();
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (redirectError) {
+      setError(redirectError);
+      clearRedirectError();
+    }
+  }, [redirectError, clearRedirectError]);
 
   if (user) return <Navigate to="/" replace />;
 
@@ -37,7 +45,7 @@ function LoginPage() {
         }
       }
     } catch (err) {
-      setError(traduzErro(err.code));
+      setError(traduzErroAuth(err?.code, err?.message || ""));
     } finally {
       setBusy(false);
     }
@@ -54,7 +62,7 @@ function LoginPage() {
       }
       await signInWithPopup(auth, provider);
     } catch (err) {
-      setError(traduzErro(err.code, err.message));
+      setError(traduzErroAuth(err?.code, err?.message || ""));
     } finally {
       setBusy(false);
     }
@@ -152,26 +160,6 @@ function GoogleIcon() {
       <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
     </svg>
   );
-}
-
-function traduzErro(code, message = "") {
-  const map = {
-    "auth/invalid-credential": "E-mail ou senha incorretos",
-    "auth/user-not-found": "Usuário não encontrado",
-    "auth/wrong-password": "Senha incorreta",
-    "auth/email-already-in-use": "E-mail já cadastrado",
-    "auth/weak-password": "Senha muito fraca (mínimo 6 caracteres)",
-    "auth/invalid-email": "E-mail inválido",
-    "auth/popup-closed-by-user": "Login cancelado",
-    "auth/network-request-failed": "Sem conexão com a internet",
-    "auth/unauthorized-domain": "Domínio não autorizado no Firebase",
-    "auth/operation-not-allowed": "Login com Google não habilitado no Firebase",
-  };
-  if (map[code]) return map[code];
-  if (message?.includes("missing initial state")) {
-    return "Login interrompido no iOS. Tente de novo no Safari ou use e-mail e senha.";
-  }
-  return "Erro ao autenticar. Tente novamente.";
 }
 
 export default LoginPage;

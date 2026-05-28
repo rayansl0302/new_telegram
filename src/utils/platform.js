@@ -19,7 +19,7 @@ export function isMobile() {
   );
 }
 
-/** Popup do Google quebra no iOS / PWA; redirect + IndexedDB resolve. */
+/** Popup do Google quebra no iOS e no PWA instalado; usar redirect. */
 export function shouldUseGoogleRedirect() {
-  return isIOS() || isStandalonePwa() || isMobile();
+  return isIOS() || isStandalonePwa();
 }

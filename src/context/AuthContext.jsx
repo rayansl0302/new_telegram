@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { getRedirectResult, onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "../services/firebase";
+import { traduzErroAuth } from "../utils/authErrors";
 
 const AuthContext = createContext(null);
 
@@ -18,6 +19,7 @@ function extractUser(firebaseUser) {
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [redirectError, setRedirectError] = useState(null);
 
   useEffect(() => {
     let unsubscribe;
@@ -25,8 +27,9 @@ export function AuthProvider({ children }) {
     async function initAuth() {
       try {
         await getRedirectResult(auth);
-      } catch {
-        /* redirect cancelado ou estado inválido — onAuthStateChanged trata */
+        setRedirectError(null);
+      } catch (err) {
+        setRedirectError(traduzErroAuth(err?.code, err?.message || ""));
       }
 
       unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -62,8 +65,19 @@ export function AuthProvider({ children }) {
 
   const logout = () => signOut(auth);
 
+  const clearRedirectError = () => setRedirectError(null);
+
   return (
-    <AuthContext.Provider value={{ user, loading, logout, refreshUser }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        logout,
+        refreshUser,
+        redirectError,
+        clearRedirectError,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
