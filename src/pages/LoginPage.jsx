@@ -1,17 +1,19 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Navigate } from "react-router-dom";
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
-  signInWithRedirect,
+  setPersistence,
+  browserLocalPersistence,
   updateProfile,
 } from "firebase/auth";
 import { auth } from "../services/firebase";
 import { createGoogleProvider } from "../services/googleAuth";
-import { shouldUseGoogleRedirect } from "../utils/platform";
+import { shouldUseGoogleIdentity } from "../utils/platform";
 import { traduzErroAuth } from "../utils/authErrors";
 import { useAuth } from "../context/AuthContext";
+import GoogleAuthButton from "../components/GoogleAuthButton";
 
 function LoginPage() {
   const { user, loading, redirectError, clearRedirectError } = useAuth();
@@ -21,6 +23,11 @@ function LoginPage() {
   const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const useGoogleIdentity = shouldUseGoogleIdentity();
+
+  const handleAuthError = useCallback((message) => {
+    setError(typeof message === "string" ? message : traduzErroAuth(message?.code, message?.message || ""));
+  }, []);
 
   useEffect(() => {
     if (redirectError) {
@@ -44,6 +51,7 @@ function LoginPage() {
     setError("");
     setBusy(true);
     try {
+      await setPersistence(auth, browserLocalPersistence);
       if (mode === "login") {
         await signInWithEmailAndPassword(auth, email, password);
       } else {
@@ -59,16 +67,12 @@ function LoginPage() {
     }
   };
 
-  const handleGoogle = async () => {
+  const handleGooglePopup = async () => {
     setError("");
     setBusy(true);
     try {
-      const provider = createGoogleProvider();
-      if (shouldUseGoogleRedirect()) {
-        await signInWithRedirect(auth, provider);
-        return;
-      }
-      await signInWithPopup(auth, provider);
+      await setPersistence(auth, browserLocalPersistence);
+      await signInWithPopup(auth, createGoogleProvider());
     } catch (err) {
       setError(traduzErroAuth(err?.code, err?.message || ""));
     } finally {
@@ -135,14 +139,23 @@ function LoginPage() {
           <div className="flex-1 h-px bg-slate-700" />
         </div>
 
-        <button
-          onClick={handleGoogle}
-          disabled={busy}
-          className="w-full py-3 bg-white hover:bg-slate-100 disabled:opacity-50 text-slate-800 font-semibold rounded-lg transition flex items-center justify-center gap-2"
-        >
-          <GoogleIcon />
-          Continuar com Google
-        </button>
+        {useGoogleIdentity ? (
+          <GoogleAuthButton
+            disabled={busy}
+            onError={handleAuthError}
+            onBusy={setBusy}
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={handleGooglePopup}
+            disabled={busy}
+            className="w-full py-3 bg-white hover:bg-slate-100 disabled:opacity-50 text-slate-800 font-semibold rounded-lg transition flex items-center justify-center gap-2"
+          >
+            <GoogleIcon />
+            Continuar com Google
+          </button>
+        )}
 
         <p className="text-center text-slate-400 text-sm mt-6">
           {mode === "login" ? "Não tem conta?" : "Já tem conta?"}{" "}

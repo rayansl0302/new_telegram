@@ -12,14 +12,7 @@ export function isStandalonePwa() {
   );
 }
 
-export function isMobile() {
-  return (
-    isIOS() ||
-    /Android|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-  );
-}
-
-/** Popup do Google quebra no iOS e no PWA instalado; usar redirect. */
-export function shouldUseGoogleRedirect() {
+/** iOS/PWA: redirect perde sessão — usar Google Identity Services (sem sair do app). */
+export function shouldUseGoogleIdentity() {
   return isIOS() || isStandalonePwa();
 }
