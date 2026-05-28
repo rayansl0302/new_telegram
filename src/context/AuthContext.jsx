@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { getRedirectResult, onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "../services/firebase";
@@ -41,33 +41,83 @@ async function syncUserDoc(firebaseUser) {
   );
 }
 
+async function applySession(firebaseUser) {
+  if (!firebaseUser) return null;
+  try {
+    await syncUserDoc(firebaseUser);
+  } catch {
+    /* Firestore offline — mantém login local */
+  }
+  return extractUser(firebaseUser);
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [redirectError, setRedirectError] = useState(null);
+  const redirectCheckedRef = useRef(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        try {
-          await syncUserDoc(firebaseUser);
-        } catch {
-          /* Firestore indisponível — mantém sessão local */
+    let cancelled = false;
+
+    async function checkRedirect() {
+      try {
+        const result = await getRedirectResult(auth);
+        if (cancelled) return;
+        if (result?.user) {
+          const sessionUser = await applySession(result.user);
+          if (!cancelled && sessionUser) {
+            setUser(sessionUser);
+            setRedirectError(null);
+          }
         }
-        setUser(extractUser(firebaseUser));
-      } else {
-        setUser(null);
+      } catch (err) {
+        if (!cancelled) {
+          setRedirectError(traduzErroAuth(err?.code, err?.message || ""));
+        }
+      } finally {
+        redirectCheckedRef.current = true;
+        if (cancelled) return;
+
+        const current = auth.currentUser;
+        if (current) {
+          applySession(current).then((sessionUser) => {
+            if (!cancelled && sessionUser) setUser(sessionUser);
+            if (!cancelled) setLoading(false);
+          });
+        } else {
+          setLoading(false);
+        }
       }
-      setLoading(false);
+    }
+
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (cancelled) return;
+
+      if (firebaseUser) {
+        const sessionUser = await applySession(firebaseUser);
+        if (!cancelled && sessionUser) {
+          setUser(sessionUser);
+          setRedirectError(null);
+          setLoading(false);
+        }
+        return;
+      }
+
+      if (!redirectCheckedRef.current) return;
+
+      if (!cancelled) {
+        setUser(null);
+        setLoading(false);
+      }
     });
 
-    getRedirectResult(auth)
-      .then(() => setRedirectError(null))
-      .catch((err) => {
-        setRedirectError(traduzErroAuth(err?.code, err?.message || ""));
-      });
+    checkRedirect();
 
-    return unsubscribe;
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, []);
 
   const refreshUser = () => {
