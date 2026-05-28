@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { onAuthStateChanged, signOut } from "firebase/auth";
+import { getRedirectResult, onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "../services/firebase";
 
@@ -20,28 +20,40 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        const userRef = doc(db, "users", firebaseUser.uid);
-        await setDoc(
-          userRef,
-          {
-            uid: firebaseUser.uid,
-            email: firebaseUser.email,
-            displayName:
-              firebaseUser.displayName || firebaseUser.email.split("@")[0],
-            photoURL: firebaseUser.photoURL || null,
-            lastSeen: serverTimestamp(),
-          },
-          { merge: true }
-        );
-        setUser(extractUser(firebaseUser));
-      } else {
-        setUser(null);
+    let unsubscribe;
+
+    async function initAuth() {
+      try {
+        await getRedirectResult(auth);
+      } catch {
+        /* redirect cancelado ou estado inválido — onAuthStateChanged trata */
       }
-      setLoading(false);
-    });
-    return unsubscribe;
+
+      unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+        if (firebaseUser) {
+          const userRef = doc(db, "users", firebaseUser.uid);
+          await setDoc(
+            userRef,
+            {
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              displayName:
+                firebaseUser.displayName || firebaseUser.email.split("@")[0],
+              photoURL: firebaseUser.photoURL || null,
+              lastSeen: serverTimestamp(),
+            },
+            { merge: true }
+          );
+          setUser(extractUser(firebaseUser));
+        } else {
+          setUser(null);
+        }
+        setLoading(false);
+      });
+    }
+
+    initAuth();
+    return () => unsubscribe?.();
   }, []);
 
   const refreshUser = () => {

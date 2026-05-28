@@ -4,10 +4,12 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
-  GoogleAuthProvider,
+  signInWithRedirect,
   updateProfile,
 } from "firebase/auth";
 import { auth } from "../services/firebase";
+import { createGoogleProvider } from "../services/googleAuth";
+import { shouldUseGoogleRedirect } from "../utils/platform";
 import { useAuth } from "../context/AuthContext";
 
 function LoginPage() {
@@ -45,9 +47,14 @@ function LoginPage() {
     setError("");
     setBusy(true);
     try {
-      await signInWithPopup(auth, new GoogleAuthProvider());
+      const provider = createGoogleProvider();
+      if (shouldUseGoogleRedirect()) {
+        await signInWithRedirect(auth, provider);
+        return;
+      }
+      await signInWithPopup(auth, provider);
     } catch (err) {
-      setError(traduzErro(err.code));
+      setError(traduzErro(err.code, err.message));
     } finally {
       setBusy(false);
     }
@@ -147,7 +154,7 @@ function GoogleIcon() {
   );
 }
 
-function traduzErro(code) {
+function traduzErro(code, message = "") {
   const map = {
     "auth/invalid-credential": "E-mail ou senha incorretos",
     "auth/user-not-found": "Usuário não encontrado",
@@ -157,8 +164,14 @@ function traduzErro(code) {
     "auth/invalid-email": "E-mail inválido",
     "auth/popup-closed-by-user": "Login cancelado",
     "auth/network-request-failed": "Sem conexão com a internet",
+    "auth/unauthorized-domain": "Domínio não autorizado no Firebase",
+    "auth/operation-not-allowed": "Login com Google não habilitado no Firebase",
   };
-  return map[code] || "Erro ao autenticar. Tente novamente.";
+  if (map[code]) return map[code];
+  if (message?.includes("missing initial state")) {
+    return "Login interrompido no iOS. Tente de novo no Safari ou use e-mail e senha.";
+  }
+  return "Erro ao autenticar. Tente novamente.";
 }
 
 export default LoginPage;
