@@ -1,6 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import MediaLightbox from "./MediaLightbox";
 import MessageInfoModal from "./MessageInfoModal";
+import {
+  setMessageReaction,
+  removeMessageReaction,
+} from "../services/chatService";
+
+const PICKER_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 
 function MessageBubble({
   message,
@@ -8,12 +14,14 @@ function MessageBubble({
   isGroup,
   senderInfo,
   chat,
+  currentUserId,
   onReply,
   isMatch,
   isCurrentMatch,
 }) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const time = formatMessageTime(message.createdAt);
   const showSender = isGroup && !isOwn && senderInfo;
@@ -24,6 +32,11 @@ function MessageBubble({
   const readStatus = isOwn ? computeReadStatus(message, chat) : null;
   const canSeeMessageInfo = isOwn && isGroup && !message.system;
 
+  const reactions = message.reactions || {};
+  const myReaction = currentUserId ? reactions[currentUserId] : null;
+  const reactionCounts = aggregateReactions(reactions);
+  const hasReactions = Object.keys(reactionCounts).length > 0;
+
   const handleQuoteClick = () => {
     if (!message.replyTo?.messageId) return;
     const el = document.getElementById(`msg-${message.replyTo.messageId}`);
@@ -33,6 +46,33 @@ function MessageBubble({
       setTimeout(() => {
         el.classList.remove("ring-2", "ring-amber-400");
       }, 1500);
+    }
+  };
+
+  const handlePickReaction = async (emoji) => {
+    setPickerOpen(false);
+    if (!chat?.id || !currentUserId) return;
+    try {
+      if (myReaction === emoji) {
+        await removeMessageReaction(chat.id, message.id, currentUserId);
+      } else {
+        await setMessageReaction(chat.id, message.id, currentUserId, emoji);
+      }
+    } catch (err) {
+      console.error("reaction failed:", err);
+    }
+  };
+
+  const handleToggleReaction = async (emoji) => {
+    if (!chat?.id || !currentUserId) return;
+    try {
+      if (myReaction === emoji) {
+        await removeMessageReaction(chat.id, message.id, currentUserId);
+      } else {
+        await setMessageReaction(chat.id, message.id, currentUserId, emoji);
+      }
+    } catch (err) {
+      console.error("reaction failed:", err);
     }
   };
 
@@ -48,6 +88,33 @@ function MessageBubble({
     </button>
   ) : null;
 
+  const reactionButton = chat && currentUserId && !message.system ? (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setPickerOpen((s) => !s)}
+        className={`p-1.5 rounded-full transition flex-shrink-0 ${
+          pickerOpen
+            ? "text-amber-400 opacity-100 bg-amber-500/10"
+            : "text-slate-400 hover:text-amber-400 opacity-40 hover:opacity-100"
+        }`}
+        title="Reagir"
+        aria-label="Reagir a esta mensagem"
+        aria-expanded={pickerOpen}
+      >
+        <SmileyIcon />
+      </button>
+      {pickerOpen && (
+        <EmojiReactionPicker
+          onSelect={handlePickReaction}
+          onClose={() => setPickerOpen(false)}
+          alignRight={isOwn}
+          myReaction={myReaction}
+        />
+      )}
+    </div>
+  ) : null;
+
   const replyButton = onReply ? (
     <button
       type="button"
@@ -61,7 +128,7 @@ function MessageBubble({
   ) : null;
 
   const bubbleClasses = [
-    "max-w-[75%] rounded-2xl px-4 py-2 shadow",
+    "rounded-2xl px-4 py-2 shadow",
     isOwn
       ? "bg-sky-600 text-white rounded-br-sm"
       : "bg-slate-800 text-white rounded-bl-sm",
@@ -81,73 +148,93 @@ function MessageBubble({
       {isOwn && (
         <>
           {infoButton}
+          {reactionButton}
           {replyButton}
         </>
       )}
 
-      <div className={bubbleClasses}>
-        {message.replyTo && (
-          <button
-            type="button"
-            onClick={handleQuoteClick}
-            className="block w-full text-left bg-black/25 border-l-4 border-white/40 rounded px-2 py-1 mb-1.5 hover:bg-black/35 transition"
-          >
-            <p className="text-xs font-semibold opacity-90 truncate">
-              {message.replyTo.senderName || "Alguém"}
-            </p>
-            <p className="text-xs opacity-70 truncate">
-              {message.replyTo.text ||
-                (message.replyTo.imageUrl ? "[Imagem]" : "")}
-            </p>
-          </button>
-        )}
+      <div
+        className={`flex flex-col max-w-[75%] min-w-0 gap-1 ${
+          isOwn ? "items-end" : "items-start"
+        }`}
+      >
+        <div className={bubbleClasses}>
+          {message.replyTo && (
+            <button
+              type="button"
+              onClick={handleQuoteClick}
+              className="block w-full text-left bg-black/25 border-l-4 border-white/40 rounded px-2 py-1 mb-1.5 hover:bg-black/35 transition"
+            >
+              <p className="text-xs font-semibold opacity-90 truncate">
+                {message.replyTo.senderName || "Alguém"}
+              </p>
+              <p className="text-xs opacity-70 truncate">
+                {message.replyTo.text ||
+                  (message.replyTo.imageUrl ? "[Imagem]" : "")}
+              </p>
+            </button>
+          )}
 
-        {showSender && (
-          <p className={`text-xs font-semibold mb-0.5 ${colorClass}`}>
-            {senderName}
-          </p>
-        )}
-        {message.imageUrl && (
-          <button
-            type="button"
-            onClick={() => setLightboxOpen(true)}
-            className="block w-full"
-            aria-label="Ampliar imagem"
-          >
-            <img
-              src={message.imageUrl}
-              alt="imagem"
-              className="rounded-lg mb-1 max-w-full max-h-80 object-contain hover:opacity-90 transition"
+          {showSender && (
+            <p className={`text-xs font-semibold mb-0.5 ${colorClass}`}>
+              {senderName}
+            </p>
+          )}
+          {message.imageUrl && (
+            <button
+              type="button"
+              onClick={() => setLightboxOpen(true)}
+              className="block w-full"
+              aria-label="Ampliar imagem"
+            >
+              <img
+                src={message.imageUrl}
+                alt="imagem"
+                className="rounded-lg mb-1 max-w-full max-h-80 object-contain hover:opacity-90 transition"
+              />
+            </button>
+          )}
+          {message.audioUrl && (
+            <audio
+              controls
+              src={message.audioUrl}
+              className="my-1 max-w-[260px] h-10"
             />
-          </button>
-        )}
-        {message.audioUrl && (
-          <audio
-            controls
-            src={message.audioUrl}
-            className="my-1 max-w-[260px] h-10"
+          )}
+          {message.file && <FileCard file={message.file} />}
+          {message.text && (
+            <p className="whitespace-pre-wrap break-words">
+              {renderTextWithLinks(message.text, isOwn)}
+            </p>
+          )}
+
+          <div className="flex items-center justify-end gap-1 mt-1">
+            <span
+              className={`text-[10px] ${
+                isOwn ? "text-sky-100/70" : "text-slate-400"
+              }`}
+            >
+              {time}
+            </span>
+            {readStatus && <TickIcon status={readStatus} />}
+          </div>
+        </div>
+
+        {hasReactions && (
+          <ReactionPills
+            counts={reactionCounts}
+            myReaction={myReaction}
+            onToggle={handleToggleReaction}
           />
         )}
-        {message.file && <FileCard file={message.file} />}
-        {message.text && (
-          <p className="whitespace-pre-wrap break-words">
-            {renderTextWithLinks(message.text, isOwn)}
-          </p>
-        )}
-
-        <div className="flex items-center justify-end gap-1 mt-1">
-          <span
-            className={`text-[10px] ${
-              isOwn ? "text-sky-100/70" : "text-slate-400"
-            }`}
-          >
-            {time}
-          </span>
-          {readStatus && <TickIcon status={readStatus} />}
-        </div>
       </div>
 
-      {!isOwn && replyButton}
+      {!isOwn && (
+        <>
+          {reactionButton}
+          {replyButton}
+        </>
+      )}
 
       {lightboxOpen && message.imageUrl && (
         <MediaLightbox
@@ -164,6 +251,87 @@ function MessageBubble({
         />
       )}
     </div>
+  );
+}
+
+// --- Reações ---
+
+function aggregateReactions(reactions) {
+  const counts = {};
+  for (const [, emoji] of Object.entries(reactions || {})) {
+    if (!emoji) continue;
+    counts[emoji] = (counts[emoji] || 0) + 1;
+  }
+  return counts;
+}
+
+function ReactionPills({ counts, myReaction, onToggle }) {
+  return (
+    <div className="flex gap-1 flex-wrap">
+      {Object.entries(counts).map(([emoji, count]) => {
+        const isMine = myReaction === emoji;
+        return (
+          <button
+            key={emoji}
+            type="button"
+            onClick={() => onToggle(emoji)}
+            className={`text-xs flex items-center gap-1 rounded-full px-2 py-0.5 border transition ${
+              isMine
+                ? "bg-sky-500/25 border-sky-400 text-sky-100"
+                : "bg-slate-700/80 border-slate-600 text-slate-200 hover:bg-slate-600"
+            }`}
+            title={isMine ? "Remover sua reação" : "Reagir"}
+          >
+            <span className="text-sm leading-none">{emoji}</span>
+            {count > 1 && <span className="font-medium">{count}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function EmojiReactionPicker({ onSelect, onClose, alignRight, myReaction }) {
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  return (
+    <>
+      <div
+        className="fixed inset-0 z-30"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div
+        className={`absolute z-40 bottom-full mb-2 bg-slate-800 rounded-full p-1 flex gap-0.5 shadow-xl border border-slate-700 whitespace-nowrap ${
+          alignRight ? "right-0" : "left-0"
+        }`}
+        role="menu"
+      >
+        {PICKER_EMOJIS.map((emoji) => {
+          const isSelected = myReaction === emoji;
+          return (
+            <button
+              key={emoji}
+              type="button"
+              onClick={() => onSelect(emoji)}
+              className={`text-xl hover:scale-125 transition px-1.5 py-1 leading-none rounded-full ${
+                isSelected ? "bg-sky-500/30" : ""
+              }`}
+              title={`Reagir com ${emoji}`}
+              role="menuitem"
+            >
+              {emoji}
+            </button>
+          );
+        })}
+      </div>
+    </>
   );
 }
 
@@ -263,6 +431,44 @@ function InfoIcon() {
       <circle cx="12" cy="12" r="10" />
       <line x1="12" y1="16" x2="12" y2="12" />
       <line x1="12" y1="8" x2="12.01" y2="8" />
+    </svg>
+  );
+}
+
+function SmileyIcon() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+      <line x1="9" y1="9" x2="9.01" y2="9" />
+      <line x1="15" y1="9" x2="15.01" y2="9" />
+    </svg>
+  );
+}
+
+function ReplyIcon() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <polyline points="9 17 4 12 9 7" />
+      <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
     </svg>
   );
 }
@@ -390,7 +596,6 @@ function DownloadIcon() {
 }
 
 function buildDownloadUrl(url) {
-  // Para URLs do Cloudinary, adiciona fl_attachment pra forçar Content-Disposition
   if (typeof url !== "string") return url;
   if (url.includes("res.cloudinary.com") && url.includes("/upload/")) {
     return url.replace("/upload/", "/upload/fl_attachment/");
@@ -407,23 +612,7 @@ function formatFileSize(bytes) {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
 
-function ReplyIcon() {
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <polyline points="9 17 4 12 9 7" />
-      <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
-    </svg>
-  );
-}
+// --- Linkify e cores ---
 
 const URL_REGEX = /((?:https?:\/\/|www\.)[^\s<>"]+)/gi;
 const TRAILING_PUNCT = /[.,!?;:)\]}>'"`]+$/;

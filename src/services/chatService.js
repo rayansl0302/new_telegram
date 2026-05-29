@@ -306,3 +306,19 @@ export const markChatAsRead = async (chatId, uid) => {
     [`lastRead.${uid}`]: serverTimestamp(),
   });
 };
+
+// --- Reações ---
+
+export const setMessageReaction = async (chatId, messageId, uid, emoji) => {
+  const msgRef = doc(db, "chats", chatId, "messages", messageId);
+  await updateDoc(msgRef, {
+    [`reactions.${uid}`]: emoji,
+  });
+};
+
+export const removeMessageReaction = async (chatId, messageId, uid) => {
+  const msgRef = doc(db, "chats", chatId, "messages", messageId);
+  await updateDoc(msgRef, {
+    [`reactions.${uid}`]: deleteField(),
+  });
+};

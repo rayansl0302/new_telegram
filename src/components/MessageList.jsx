@@ -51,6 +51,7 @@ function MessageList({
             isGroup={isGroup}
             senderInfo={senderInfo}
             chat={chat}
+            currentUserId={currentUserId}
             onReply={onReply}
             isMatch={matchedIds?.has(msg.id)}
             isCurrentMatch={currentMatchId === msg.id}
