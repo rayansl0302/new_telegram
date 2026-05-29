@@ -3,8 +3,11 @@ import { sendMessage } from "../services/chatService";
 import {
   uploadChatImage,
   uploadChatAudio,
+  uploadChatFile,
 } from "../services/storageService";
 import CameraCapture from "./CameraCapture";
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
 function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
   const [text, setText] = useState("");
@@ -13,7 +16,8 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [showCamera, setShowCamera] = useState(false);
 
-  const fileRef = useRef(null);
+  const imageFileRef = useRef(null);
+  const docFileRef = useRef(null);
   const textRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -27,7 +31,6 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
     }
   }, [replyingTo]);
 
-  // Cleanup ao desmontar
   useEffect(() => {
     return () => {
       if (recordTimerRef.current) clearInterval(recordTimerRef.current);
@@ -35,13 +38,16 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
     };
   }, []);
 
-  const sendTextOrAudio = async (payload) => {
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!text.trim() || busy) return;
     setBusy(true);
     try {
       await sendMessage(chatId, senderId, {
-        ...payload,
+        text: text.trim(),
         replyTo: replyingTo || undefined,
       });
+      setText("");
       onCancelReply?.();
     } catch (err) {
       console.error(err);
@@ -51,18 +57,17 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!text.trim() || busy) return;
-    await sendTextOrAudio({ text: text.trim() });
-    setText("");
-  };
-
-  const handleFile = async (e) => {
+  const handleImage = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) {
-      alert("Apenas imagens são suportadas");
+      alert("Apenas imagens são suportadas neste botão");
+      e.target.value = "";
+      return;
+    }
+    if (file.size > MAX_FILE_SIZE) {
+      alert("Imagem muito grande (máximo 10 MB)");
+      e.target.value = "";
       return;
     }
     setBusy(true);
@@ -76,6 +81,36 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
     } catch (err) {
       console.error(err);
       alert("Erro ao enviar imagem");
+    } finally {
+      setBusy(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleDocFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > MAX_FILE_SIZE) {
+      alert("Arquivo muito grande (máximo 10 MB)");
+      e.target.value = "";
+      return;
+    }
+    setBusy(true);
+    try {
+      const url = await uploadChatFile(chatId, file);
+      await sendMessage(chatId, senderId, {
+        file: {
+          url,
+          name: file.name,
+          size: file.size,
+          type: file.type || "application/octet-stream",
+        },
+        replyTo: replyingTo || undefined,
+      });
+      onCancelReply?.();
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao enviar arquivo");
     } finally {
       setBusy(false);
       e.target.value = "";
@@ -116,7 +151,6 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
       audioChunksRef.current = [];
       cancelRecordingFlagRef.current = false;
 
-      // Tenta usar opus em webm, fallback para o padrão
       let mimeType = "audio/webm;codecs=opus";
       if (!MediaRecorder.isTypeSupported(mimeType)) {
         mimeType = "audio/webm";
@@ -257,16 +291,26 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
           </button>
         </div>
       ) : (
-        <form onSubmit={handleSubmit} className="p-3 flex items-center gap-2">
+        <form onSubmit={handleSubmit} className="p-3 flex items-center gap-1.5">
           <button
             type="button"
-            onClick={() => fileRef.current?.click()}
+            onClick={() => imageFileRef.current?.click()}
             disabled={busy}
             className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition disabled:opacity-50"
             title="Anexar imagem"
             aria-label="Anexar imagem"
           >
             <AttachIcon />
+          </button>
+          <button
+            type="button"
+            onClick={() => docFileRef.current?.click()}
+            disabled={busy}
+            className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition disabled:opacity-50"
+            title="Enviar documento"
+            aria-label="Enviar documento"
+          >
+            <DocIcon />
           </button>
           <button
             type="button"
@@ -279,10 +323,17 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
             <CameraIcon />
           </button>
           <input
-            ref={fileRef}
+            ref={imageFileRef}
             type="file"
             accept="image/*"
-            onChange={handleFile}
+            onChange={handleImage}
+            className="hidden"
+          />
+          <input
+            ref={docFileRef}
+            type="file"
+            accept=".pdf,.doc,.docx,.xls,.xlsx,.xml,.txt,.csv,.zip,.rar,.7z,.json,.pptx,.ppt,.odt,.ods,.odp,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,text/csv,text/xml,application/xml,application/json,application/zip,application/x-rar-compressed,application/octet-stream"
+            onChange={handleDocFile}
             className="hidden"
           />
           <input
@@ -294,7 +345,7 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
             value={text}
             onChange={(e) => setText(e.target.value)}
             disabled={busy}
-            className="flex-1 px-4 py-2 bg-slate-800 border border-slate-700 rounded-full text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 disabled:opacity-50"
+            className="flex-1 px-4 py-2 bg-slate-800 border border-slate-700 rounded-full text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 disabled:opacity-50 min-w-0"
           />
           {text.trim() ? (
             <button
@@ -335,6 +386,17 @@ function AttachIcon() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+    </svg>
+  );
+}
+
+function DocIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="9" y1="13" x2="15" y2="13" />
+      <line x1="9" y1="17" x2="15" y2="17" />
     </svg>
   );
 }

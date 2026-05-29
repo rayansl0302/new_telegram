@@ -128,6 +128,7 @@ function MessageBubble({
             className="my-1 max-w-[260px] h-10"
           />
         )}
+        {message.file && <FileCard file={message.file} />}
         {message.text && (
           <p className="whitespace-pre-wrap break-words">
             {renderTextWithLinks(message.text, isOwn)}
@@ -264,6 +265,146 @@ function InfoIcon() {
       <line x1="12" y1="8" x2="12.01" y2="8" />
     </svg>
   );
+}
+
+// --- File card (PDF, XML, DOC, etc.) ---
+
+function FileCard({ file }) {
+  const downloadUrl = buildDownloadUrl(file.url);
+
+  return (
+    <div className="flex items-center gap-3 bg-black/25 rounded-lg px-3 py-2 my-1 min-w-[240px] max-w-full">
+      <FileBadge name={file.name} />
+      <a
+        href={file.url}
+        target="_blank"
+        rel="noreferrer noopener"
+        className="flex-1 min-w-0 hover:underline"
+        title={file.name}
+      >
+        <p className="text-sm font-medium truncate">{file.name}</p>
+        <p className="text-xs opacity-70">{formatFileSize(file.size)}</p>
+      </a>
+      <a
+        href={downloadUrl}
+        target="_blank"
+        rel="noreferrer noopener"
+        download={file.name}
+        className="p-1.5 rounded-full hover:bg-white/15 transition opacity-80 hover:opacity-100 flex-shrink-0"
+        title="Baixar"
+        aria-label="Baixar arquivo"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <DownloadIcon />
+      </a>
+    </div>
+  );
+}
+
+function FileBadge({ name }) {
+  const ext = (name?.split(".").pop() || "").toLowerCase();
+  const label = ext ? ext.toUpperCase().slice(0, 4) : "FILE";
+  const color = fileBadgeColor(ext);
+  return (
+    <div
+      className={`w-11 h-12 rounded-md flex flex-col items-center justify-center text-white shadow flex-shrink-0 ${color}`}
+    >
+      <FileGlyph />
+      <span className="text-[9px] font-bold leading-none mt-0.5 tracking-wide">
+        {label}
+      </span>
+    </div>
+  );
+}
+
+function fileBadgeColor(ext) {
+  switch (ext) {
+    case "pdf":
+      return "bg-red-500";
+    case "doc":
+    case "docx":
+    case "odt":
+      return "bg-blue-500";
+    case "xls":
+    case "xlsx":
+    case "csv":
+    case "ods":
+      return "bg-emerald-500";
+    case "ppt":
+    case "pptx":
+    case "odp":
+      return "bg-orange-500";
+    case "zip":
+    case "rar":
+    case "7z":
+    case "tar":
+    case "gz":
+      return "bg-amber-500";
+    case "xml":
+    case "json":
+    case "yaml":
+    case "yml":
+      return "bg-cyan-500";
+    case "txt":
+    case "md":
+      return "bg-slate-500";
+    default:
+      return "bg-slate-500";
+  }
+}
+
+function FileGlyph() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="white"
+      opacity="0.85"
+      aria-hidden="true"
+    >
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <path d="M14 2v6h6" fill="rgba(0,0,0,0.2)" />
+    </svg>
+  );
+}
+
+function DownloadIcon() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
+    </svg>
+  );
+}
+
+function buildDownloadUrl(url) {
+  // Para URLs do Cloudinary, adiciona fl_attachment pra forçar Content-Disposition
+  if (typeof url !== "string") return url;
+  if (url.includes("res.cloudinary.com") && url.includes("/upload/")) {
+    return url.replace("/upload/", "/upload/fl_attachment/");
+  }
+  return url;
+}
+
+function formatFileSize(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024)
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
 
 function ReplyIcon() {

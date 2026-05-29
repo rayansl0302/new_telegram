@@ -261,7 +261,7 @@ export const demoteFromAdmin = async (chatId, uid) => {
 export const sendMessage = async (
   chatId,
   senderId,
-  { text, imageUrl, audioUrl, replyTo } = {}
+  { text, imageUrl, audioUrl, file, replyTo } = {}
 ) => {
   const messagesRef = collection(db, "chats", chatId, "messages");
   const messageData = {
@@ -269,6 +269,7 @@ export const sendMessage = async (
     text: text || "",
     imageUrl: imageUrl || null,
     audioUrl: audioUrl || null,
+    file: file || null,
     createdAt: serverTimestamp(),
   };
   if (replyTo) {
@@ -285,7 +286,8 @@ export const sendMessage = async (
   const previewText =
     text ||
     (imageUrl ? "[Imagem]" : "") ||
-    (audioUrl ? "[Áudio]" : "");
+    (audioUrl ? "[Áudio]" : "") ||
+    (file ? `[Arquivo: ${file.name || "documento"}]` : "");
 
   const chatRef = doc(db, "chats", chatId);
   await updateDoc(chatRef, {

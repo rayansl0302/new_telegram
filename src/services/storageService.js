@@ -37,3 +37,7 @@ export const uploadGroupPhoto = (file) =>
 // Cloudinary trata áudio sob o resource_type "video"
 export const uploadChatAudio = (chatId, file) =>
   uploadToCloudinary(file, `audio/${chatId}`, "video");
+
+// Documentos / arquivos genéricos (PDF, XML, DOC, ZIP etc.)
+export const uploadChatFile = (chatId, file) =>
+  uploadToCloudinary(file, `files/${chatId}`, "raw");
