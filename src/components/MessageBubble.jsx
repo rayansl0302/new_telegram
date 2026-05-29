@@ -6,6 +6,7 @@ function MessageBubble({
   isOwn,
   isGroup,
   senderInfo,
+  chat,
   onReply,
   isMatch,
   isCurrentMatch,
@@ -17,6 +18,8 @@ function MessageBubble({
   const senderName =
     senderInfo?.displayName || senderInfo?.email || "Alguém";
   const colorClass = showSender ? colorFromName(senderName) : "";
+
+  const readStatus = isOwn ? computeReadStatus(message, chat) : null;
 
   const handleQuoteClick = () => {
     if (!message.replyTo?.messageId) return;
@@ -110,13 +113,17 @@ function MessageBubble({
             {renderTextWithLinks(message.text, isOwn)}
           </p>
         )}
-        <p
-          className={`text-[10px] mt-1 text-right ${
-            isOwn ? "text-sky-100/70" : "text-slate-400"
-          }`}
-        >
-          {time}
-        </p>
+
+        <div className="flex items-center justify-end gap-1 mt-1">
+          <span
+            className={`text-[10px] ${
+              isOwn ? "text-sky-100/70" : "text-slate-400"
+            }`}
+          >
+            {time}
+          </span>
+          {readStatus && <TickIcon status={readStatus} />}
+        </div>
       </div>
 
       {!isOwn && replyButton}
@@ -128,6 +135,92 @@ function MessageBubble({
         />
       )}
     </div>
+  );
+}
+
+// --- Status de leitura ---
+
+function computeReadStatus(message, chat) {
+  if (!chat || message.system) return null;
+  const senderId = message.senderId;
+  if (!senderId) return null;
+
+  const recipients = (chat.participants || []).filter((p) => p !== senderId);
+  if (recipients.length === 0) return "sent";
+
+  const msgMs = message.createdAt?.toMillis?.();
+  if (!msgMs) return "sent"; // serverTimestamp ainda pendente
+
+  const lastRead = chat.lastRead || {};
+  const deliveredTo = message.deliveredTo || [];
+
+  const allRead = recipients.every((uid) => {
+    const readMs = lastRead[uid]?.toMillis?.() || 0;
+    return readMs >= msgMs;
+  });
+  if (allRead) return "read";
+
+  const allDelivered = recipients.every((uid) => deliveredTo.includes(uid));
+  if (allDelivered) return "delivered";
+
+  return "sent";
+}
+
+function TickIcon({ status }) {
+  const isRead = status === "read";
+  const isDouble = status === "delivered" || status === "read";
+  const colorClass = isRead ? "text-cyan-300" : "text-sky-100/70";
+
+  return (
+    <span
+      className={`inline-flex items-center ${colorClass}`}
+      title={
+        isRead ? "Lido" : isDouble ? "Entregue" : "Enviado"
+      }
+      aria-label={
+        isRead ? "Lido" : isDouble ? "Entregue" : "Enviado"
+      }
+    >
+      {isDouble ? <DoubleTick /> : <SingleTick />}
+    </span>
+  );
+}
+
+function SingleTick() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 18 18"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <polyline points="3 10 7 14 15 4" />
+    </svg>
+  );
+}
+
+function DoubleTick() {
+  return (
+    <svg
+      width="18"
+      height="14"
+      viewBox="0 0 24 18"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <polyline points="2 10 6 14 14 4" />
+      <polyline points="9 14 17 14 9 14" opacity="0" />
+      <polyline points="9 10 13 14 23 4" />
+    </svg>
   );
 }
 

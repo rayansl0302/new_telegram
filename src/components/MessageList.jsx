@@ -50,6 +50,7 @@ function MessageList({
             isOwn={isOwn}
             isGroup={isGroup}
             senderInfo={senderInfo}
+            chat={chat}
             onReply={onReply}
             isMatch={matchedIds?.has(msg.id)}
             isCurrentMatch={currentMatchId === msg.id}
