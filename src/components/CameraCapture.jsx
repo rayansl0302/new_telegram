@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 function CameraCapture({ onCapture, onClose }) {
   const videoRef = useRef(null);
@@ -100,7 +101,7 @@ function CameraCapture({ onCapture, onClose }) {
     setFacing((f) => (f === "user" ? "environment" : "user"));
   };
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 bg-black z-[70] flex flex-col">
       <header className="flex items-center justify-between p-3 text-white">
         <button
@@ -187,7 +188,8 @@ function CameraCapture({ onCapture, onClose }) {
           </button>
         ) : null}
       </footer>
-    </div>
+    </div>,
+    document.body
   );
 }
 

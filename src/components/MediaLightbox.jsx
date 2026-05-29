@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { createPortal } from "react-dom";
 
 function MediaLightbox({ src, onClose }) {
   useEffect(() => {
@@ -43,7 +44,7 @@ function MediaLightbox({ src, onClose }) {
     window.open(src, "_blank", "noopener,noreferrer");
   };
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 bg-black/95 z-[60] flex items-center justify-center p-4"
       onClick={onClose}
@@ -87,7 +88,8 @@ function MediaLightbox({ src, onClose }) {
         className="max-w-full max-h-full object-contain select-none"
         onClick={(e) => e.stopPropagation()}
       />
-    </div>
+    </div>,
+    document.body
   );
 }
 
