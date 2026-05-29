@@ -3,13 +3,14 @@ import LoginPage from "./pages/LoginPage";
 import ChatPage from "./pages/ChatPage";
 import ProfilePage from "./pages/ProfilePage";
 import ProtectedRoute from "./components/ProtectedRoute";
+import GlobalNotifications from "./components/GlobalNotifications";
 
 function App() {
   return (
     <BrowserRouter>
+      <GlobalNotifications />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
         <Route
           path="/"
           element={
@@ -26,6 +27,7 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );

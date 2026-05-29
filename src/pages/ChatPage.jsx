@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useChats } from "../hooks/useChats";
 import { useNotifications } from "../hooks/useNotifications";
@@ -27,13 +27,8 @@ function ChatPage() {
     return set;
   }, [chats, user?.uid]);
 
-  useEffect(() => {
-    const count = unreadChatIds.size;
-    document.title = count > 0 ? `(${count}) Telegram Clone` : "Telegram Clone";
-    return () => {
-      document.title = "Telegram Clone";
-    };
-  }, [unreadChatIds.size]);
+  // O título da aba e o favicon badge agora são gerenciados globalmente
+  // em <GlobalNotifications /> (App.jsx), pra funcionarem em qualquer rota.
 
   useNotifications({
     chats,
