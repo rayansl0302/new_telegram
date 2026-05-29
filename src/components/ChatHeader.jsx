@@ -1,6 +1,13 @@
 import Avatar from "./Avatar";
 
-function ChatHeader({ chat, currentUserId, onBack, onOpenInfo }) {
+function ChatHeader({
+  chat,
+  currentUserId,
+  onBack,
+  onOpenInfo,
+  onToggleSearch,
+  searchActive,
+}) {
   const isGroup = chat.type === "group";
 
   let name, photoURL, subtitle;
@@ -43,6 +50,23 @@ function ChatHeader({ chat, currentUserId, onBack, onOpenInfo }) {
           <p className="text-xs text-slate-500 truncate">{subtitle}</p>
         </div>
       </button>
+
+      {onToggleSearch && (
+        <button
+          type="button"
+          onClick={onToggleSearch}
+          className={`p-2 rounded-lg transition flex-shrink-0 ${
+            searchActive
+              ? "bg-sky-500/15 text-sky-400"
+              : "text-slate-400 hover:text-white hover:bg-slate-800"
+          }`}
+          title="Buscar nesta conversa"
+          aria-label="Buscar nesta conversa"
+          aria-pressed={searchActive ? "true" : "false"}
+        >
+          <SearchIcon />
+        </button>
+      )}
     </header>
   );
 }
@@ -61,6 +85,24 @@ function BackIcon() {
     >
       <line x1="19" y1="12" x2="5" y2="12" />
       <polyline points="12 19 5 12 12 5" />
+    </svg>
+  );
+}
+
+function SearchIcon() {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="11" cy="11" r="8" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" />
     </svg>
   );
 }

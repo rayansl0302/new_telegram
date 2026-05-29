@@ -1,7 +1,15 @@
 import { useState } from "react";
 import MediaLightbox from "./MediaLightbox";
 
-function MessageBubble({ message, isOwn, isGroup, senderInfo }) {
+function MessageBubble({
+  message,
+  isOwn,
+  isGroup,
+  senderInfo,
+  onReply,
+  isMatch,
+  isCurrentMatch,
+}) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
 
   const time = formatMessageTime(message.createdAt);
@@ -10,15 +18,67 @@ function MessageBubble({ message, isOwn, isGroup, senderInfo }) {
     senderInfo?.displayName || senderInfo?.email || "Alguém";
   const colorClass = showSender ? colorFromName(senderName) : "";
 
+  const handleQuoteClick = () => {
+    if (!message.replyTo?.messageId) return;
+    const el = document.getElementById(`msg-${message.replyTo.messageId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.classList.add("ring-2", "ring-amber-400");
+      setTimeout(() => {
+        el.classList.remove("ring-2", "ring-amber-400");
+      }, 1500);
+    }
+  };
+
+  const replyButton = onReply ? (
+    <button
+      type="button"
+      onClick={() => onReply(message)}
+      className="text-slate-400 hover:text-sky-400 p-1.5 rounded-full opacity-40 hover:opacity-100 transition flex-shrink-0"
+      title="Responder"
+      aria-label="Responder a esta mensagem"
+    >
+      <ReplyIcon />
+    </button>
+  ) : null;
+
+  const bubbleClasses = [
+    "max-w-[75%] rounded-2xl px-4 py-2 shadow",
+    isOwn
+      ? "bg-sky-600 text-white rounded-br-sm"
+      : "bg-slate-800 text-white rounded-bl-sm",
+    isCurrentMatch ? "ring-2 ring-amber-400" : "",
+    isMatch && !isCurrentMatch ? "ring-1 ring-amber-400/60" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <div className={`flex ${isOwn ? "justify-end" : "justify-start"}`}>
-      <div
-        className={`max-w-[70%] rounded-2xl px-4 py-2 shadow ${
-          isOwn
-            ? "bg-sky-600 text-white rounded-br-sm"
-            : "bg-slate-800 text-white rounded-bl-sm"
-        }`}
-      >
+    <div
+      id={`msg-${message.id}`}
+      className={`flex items-center gap-2 scroll-mt-24 ${
+        isOwn ? "justify-end" : "justify-start"
+      }`}
+    >
+      {isOwn && replyButton}
+
+      <div className={bubbleClasses}>
+        {message.replyTo && (
+          <button
+            type="button"
+            onClick={handleQuoteClick}
+            className="block w-full text-left bg-black/25 border-l-4 border-white/40 rounded px-2 py-1 mb-1.5 hover:bg-black/35 transition"
+          >
+            <p className="text-xs font-semibold opacity-90 truncate">
+              {message.replyTo.senderName || "Alguém"}
+            </p>
+            <p className="text-xs opacity-70 truncate">
+              {message.replyTo.text ||
+                (message.replyTo.imageUrl ? "[Imagem]" : "")}
+            </p>
+          </button>
+        )}
+
         {showSender && (
           <p className={`text-xs font-semibold mb-0.5 ${colorClass}`}>
             {senderName}
@@ -52,6 +112,8 @@ function MessageBubble({ message, isOwn, isGroup, senderInfo }) {
         </p>
       </div>
 
+      {!isOwn && replyButton}
+
       {lightboxOpen && message.imageUrl && (
         <MediaLightbox
           src={message.imageUrl}
@@ -62,10 +124,26 @@ function MessageBubble({ message, isOwn, isGroup, senderInfo }) {
   );
 }
 
+function ReplyIcon() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <polyline points="9 17 4 12 9 7" />
+      <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
+    </svg>
+  );
+}
+
 // Regex captura http(s)://... e também www....
 const URL_REGEX = /((?:https?:\/\/|www\.)[^\s<>"]+)/gi;
-
-// Pontuação que pode "vazar" pro final da URL e queremos manter fora do link
 const TRAILING_PUNCT = /[.,!?;:)\]}>'"`]+$/;
 
 function renderTextWithLinks(text, isOwn) {

@@ -127,8 +127,6 @@ export const removeGroupMember = async (chatId, uid) => {
     throw new Error("O grupo precisa ter pelo menos 2 membros");
   }
 
-  // Se quem está saindo/sendo removido é o único administrador,
-  // exigir que promova alguém antes.
   const isAdmin = admins.includes(uid);
   const otherAdminsExist = admins.some((a) => a !== uid);
   if (isAdmin && !otherAdminsExist) {
@@ -186,14 +184,28 @@ export const demoteFromAdmin = async (chatId, uid) => {
   });
 };
 
-export const sendMessage = async (chatId, senderId, { text, imageUrl }) => {
+export const sendMessage = async (
+  chatId,
+  senderId,
+  { text, imageUrl, replyTo } = {}
+) => {
   const messagesRef = collection(db, "chats", chatId, "messages");
-  await addDoc(messagesRef, {
+  const messageData = {
     senderId,
     text: text || "",
     imageUrl: imageUrl || null,
     createdAt: serverTimestamp(),
-  });
+  };
+  if (replyTo) {
+    messageData.replyTo = {
+      messageId: replyTo.messageId,
+      senderId: replyTo.senderId,
+      senderName: replyTo.senderName || "",
+      text: (replyTo.text || "").slice(0, 200),
+      imageUrl: replyTo.imageUrl || null,
+    };
+  }
+  await addDoc(messagesRef, messageData);
 
   const chatRef = doc(db, "chats", chatId);
   await updateDoc(chatRef, {

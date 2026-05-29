@@ -1,7 +1,15 @@
 import { useEffect, useRef } from "react";
 import MessageBubble from "./MessageBubble";
 
-function MessageList({ messages, currentUserId, loading, chat }) {
+function MessageList({
+  messages,
+  currentUserId,
+  loading,
+  chat,
+  onReply,
+  matchedIds,
+  currentMatchId,
+}) {
   const bottomRef = useRef(null);
   const isGroup = chat?.type === "group";
 
@@ -38,6 +46,9 @@ function MessageList({ messages, currentUserId, loading, chat }) {
             isOwn={isOwn}
             isGroup={isGroup}
             senderInfo={senderInfo}
+            onReply={onReply}
+            isMatch={matchedIds?.has(msg.id)}
+            isCurrentMatch={currentMatchId === msg.id}
           />
         );
       })}
