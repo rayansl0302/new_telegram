@@ -38,23 +38,27 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
     };
   }, []);
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
-    if (!text.trim() || busy) return;
-    setBusy(true);
-    try {
-      await sendMessage(chatId, senderId, {
-        text: text.trim(),
-        replyTo: replyingTo || undefined,
-      });
-      setText("");
-      onCancelReply?.();
-    } catch (err) {
-      console.error(err);
-      alert("Erro ao enviar mensagem");
-    } finally {
-      setBusy(false);
-    }
+    const trimmed = text.trim();
+    if (!trimmed) return;
+
+    // Otimista: limpa o input na hora, permite digitar a próxima mensagem.
+    // O Firestore local cache já mostra a mensagem imediatamente.
+    const replySnap = replyingTo;
+    setText("");
+    onCancelReply?.();
+
+    // Envia em background — sem await, sem busy state pra texto.
+    sendMessage(chatId, senderId, {
+      text: trimmed,
+      replyTo: replySnap || undefined,
+    }).catch((err) => {
+      console.error("Falha ao enviar:", err);
+      // Restaura o texto só se o usuário ainda não tiver digitado algo novo.
+      setText((current) => current || trimmed);
+      alert("Erro ao enviar a mensagem. Tente novamente.");
+    });
   };
 
   const handleImage = async (e) => {
@@ -344,14 +348,12 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
             }
             value={text}
             onChange={(e) => setText(e.target.value)}
-            disabled={busy}
-            className="flex-1 px-4 py-2 bg-slate-800 border border-slate-700 rounded-full text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 disabled:opacity-50 min-w-0"
+            className="flex-1 px-4 py-2 bg-slate-800 border border-slate-700 rounded-full text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 min-w-0"
           />
           {text.trim() ? (
             <button
               type="submit"
-              disabled={busy}
-              className="p-2 bg-sky-500 hover:bg-sky-600 disabled:opacity-30 text-white rounded-full transition"
+              className="p-2 bg-sky-500 hover:bg-sky-600 text-white rounded-full transition"
               aria-label="Enviar"
               title="Enviar"
             >
