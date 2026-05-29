@@ -12,6 +12,7 @@ import {
   arrayUnion,
   arrayRemove,
   deleteField,
+  writeBatch,
 } from "firebase/firestore";
 import { auth, db } from "./firebase";
 
@@ -36,15 +37,18 @@ function getActorName() {
 async function addSystemMessage(chatId, text) {
   const u = auth.currentUser;
   if (!u || !text) return;
-  const messagesRef = collection(db, "chats", chatId, "messages");
-  await addDoc(messagesRef, {
+  // Batch para garantir que message.createdAt e chat.lastMessage.createdAt
+  // resolvam pro MESMO timestamp do servidor (evita race com lastRead).
+  const batch = writeBatch(db);
+  const msgRef = doc(collection(db, "chats", chatId, "messages"));
+  batch.set(msgRef, {
     system: true,
     senderId: u.uid,
     text,
     createdAt: serverTimestamp(),
   });
   const chatRef = doc(db, "chats", chatId);
-  await updateDoc(chatRef, {
+  batch.update(chatRef, {
     lastMessage: {
       text,
       senderId: u.uid,
@@ -53,6 +57,7 @@ async function addSystemMessage(chatId, text) {
     },
     updatedAt: serverTimestamp(),
   });
+  await batch.commit();
 }
 
 // --- API pública ---
@@ -263,7 +268,6 @@ export const sendMessage = async (
   senderId,
   { text, imageUrl, audioUrl, file, replyTo } = {}
 ) => {
-  const messagesRef = collection(db, "chats", chatId, "messages");
   const messageData = {
     senderId,
     text: text || "",
@@ -281,7 +285,6 @@ export const sendMessage = async (
       imageUrl: replyTo.imageUrl || null,
     };
   }
-  await addDoc(messagesRef, messageData);
 
   const previewText =
     text ||
@@ -289,8 +292,16 @@ export const sendMessage = async (
     (audioUrl ? "[Áudio]" : "") ||
     (file ? `[Arquivo: ${file.name || "documento"}]` : "");
 
+  // Batch: garante que message.createdAt e chat.lastMessage.createdAt
+  // resolvam EXATAMENTE para o mesmo serverTimestamp. Sem isso, há uma
+  // race condition em que lastRead < lastMessage.createdAt mesmo quando
+  // o usuário já visualizou (chat fica como "novo" após visualização).
+  const batch = writeBatch(db);
+  const msgRef = doc(collection(db, "chats", chatId, "messages"));
+  batch.set(msgRef, messageData);
+
   const chatRef = doc(db, "chats", chatId);
-  await updateDoc(chatRef, {
+  batch.update(chatRef, {
     lastMessage: {
       text: previewText,
       senderId,
@@ -298,6 +309,8 @@ export const sendMessage = async (
     },
     updatedAt: serverTimestamp(),
   });
+
+  await batch.commit();
 };
 
 export const markChatAsRead = async (chatId, uid) => {
