@@ -1,5 +1,6 @@
 import { useState } from "react";
 import MediaLightbox from "./MediaLightbox";
+import MessageInfoModal from "./MessageInfoModal";
 
 function MessageBubble({
   message,
@@ -12,6 +13,7 @@ function MessageBubble({
   isCurrentMatch,
 }) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
 
   const time = formatMessageTime(message.createdAt);
   const showSender = isGroup && !isOwn && senderInfo;
@@ -20,6 +22,7 @@ function MessageBubble({
   const colorClass = showSender ? colorFromName(senderName) : "";
 
   const readStatus = isOwn ? computeReadStatus(message, chat) : null;
+  const canSeeMessageInfo = isOwn && isGroup && !message.system;
 
   const handleQuoteClick = () => {
     if (!message.replyTo?.messageId) return;
@@ -32,6 +35,18 @@ function MessageBubble({
       }, 1500);
     }
   };
+
+  const infoButton = canSeeMessageInfo ? (
+    <button
+      type="button"
+      onClick={() => setInfoOpen(true)}
+      className="text-slate-400 hover:text-cyan-400 p-1.5 rounded-full opacity-40 hover:opacity-100 transition flex-shrink-0"
+      title="Dados da mensagem"
+      aria-label="Ver quem visualizou esta mensagem"
+    >
+      <InfoIcon />
+    </button>
+  ) : null;
 
   const replyButton = onReply ? (
     <button
@@ -59,11 +74,16 @@ function MessageBubble({
   return (
     <div
       id={`msg-${message.id}`}
-      className={`flex items-center gap-2 scroll-mt-24 ${
+      className={`flex items-center gap-1 scroll-mt-24 ${
         isOwn ? "justify-end" : "justify-start"
       }`}
     >
-      {isOwn && replyButton}
+      {isOwn && (
+        <>
+          {infoButton}
+          {replyButton}
+        </>
+      )}
 
       <div className={bubbleClasses}>
         {message.replyTo && (
@@ -134,6 +154,14 @@ function MessageBubble({
           onClose={() => setLightboxOpen(false)}
         />
       )}
+
+      {infoOpen && canSeeMessageInfo && chat && (
+        <MessageInfoModal
+          message={message}
+          chat={chat}
+          onClose={() => setInfoOpen(false)}
+        />
+      )}
     </div>
   );
 }
@@ -149,7 +177,7 @@ function computeReadStatus(message, chat) {
   if (recipients.length === 0) return "sent";
 
   const msgMs = message.createdAt?.toMillis?.();
-  if (!msgMs) return "sent"; // serverTimestamp ainda pendente
+  if (!msgMs) return "sent";
 
   const lastRead = chat.lastRead || {};
   const deliveredTo = message.deliveredTo || [];
@@ -174,12 +202,8 @@ function TickIcon({ status }) {
   return (
     <span
       className={`inline-flex items-center ${colorClass}`}
-      title={
-        isRead ? "Lido" : isDouble ? "Entregue" : "Enviado"
-      }
-      aria-label={
-        isRead ? "Lido" : isDouble ? "Entregue" : "Enviado"
-      }
+      title={isRead ? "Lido" : isDouble ? "Entregue" : "Enviado"}
+      aria-label={isRead ? "Lido" : isDouble ? "Entregue" : "Enviado"}
     >
       {isDouble ? <DoubleTick /> : <SingleTick />}
     </span>
@@ -218,8 +242,26 @@ function DoubleTick() {
       aria-hidden="true"
     >
       <polyline points="2 10 6 14 14 4" />
-      <polyline points="9 14 17 14 9 14" opacity="0" />
       <polyline points="9 10 13 14 23 4" />
+    </svg>
+  );
+}
+
+function InfoIcon() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="16" x2="12" y2="12" />
+      <line x1="12" y1="8" x2="12.01" y2="8" />
     </svg>
   );
 }
