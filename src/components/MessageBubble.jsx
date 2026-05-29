@@ -98,6 +98,13 @@ function MessageBubble({
             />
           </button>
         )}
+        {message.audioUrl && (
+          <audio
+            controls
+            src={message.audioUrl}
+            className="my-1 max-w-[260px] h-10"
+          />
+        )}
         {message.text && (
           <p className="whitespace-pre-wrap break-words">
             {renderTextWithLinks(message.text, isOwn)}
@@ -142,7 +149,6 @@ function ReplyIcon() {
   );
 }
 
-// Regex captura http(s)://... e também www....
 const URL_REGEX = /((?:https?:\/\/|www\.)[^\s<>"]+)/gi;
 const TRAILING_PUNCT = /[.,!?;:)\]}>'"`]+$/;
 

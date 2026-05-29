@@ -1,7 +1,7 @@
 const CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
 const UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 
-async function uploadToCloudinary(file, folder) {
+async function uploadToCloudinary(file, folder, resourceType = "image") {
   if (!CLOUD_NAME || !UPLOAD_PRESET) {
     throw new Error("Cloudinary não configurado (.env.local)");
   }
@@ -12,7 +12,7 @@ async function uploadToCloudinary(file, folder) {
   formData.append("folder", folder);
 
   const res = await fetch(
-    `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
+    `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/${resourceType}/upload`,
     { method: "POST", body: formData }
   );
 
@@ -26,9 +26,14 @@ async function uploadToCloudinary(file, folder) {
 }
 
 export const uploadChatImage = (chatId, file) =>
-  uploadToCloudinary(file, `chats/${chatId}`);
+  uploadToCloudinary(file, `chats/${chatId}`, "image");
 
 export const uploadAvatar = (uid, file) =>
-  uploadToCloudinary(file, `avatars/${uid}`);
+  uploadToCloudinary(file, `avatars/${uid}`, "image");
 
-export const uploadGroupPhoto = (file) => uploadToCloudinary(file, `groups`);
+export const uploadGroupPhoto = (file) =>
+  uploadToCloudinary(file, `groups`, "image");
+
+// Cloudinary trata áudio sob o resource_type "video"
+export const uploadChatAudio = (chatId, file) =>
+  uploadToCloudinary(file, `audio/${chatId}`, "video");

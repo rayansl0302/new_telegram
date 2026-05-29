@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { updateUserProfile } from "../services/userService";
@@ -17,8 +17,27 @@ function ProfilePage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
+  const [notifPermission, setNotifPermission] = useState(() => {
+    if (typeof window === "undefined") return "unsupported";
+    if (!("Notification" in window)) return "unsupported";
+    return Notification.permission;
+  });
+  const [notifBusy, setNotifBusy] = useState(false);
+
+  // Atualiza estado se permissão mudar enquanto a página está aberta (raro)
+  useEffect(() => {
+    if (!("Notification" in window)) return;
+    const interval = setInterval(() => {
+      if (Notification.permission !== notifPermission) {
+        setNotifPermission(Notification.permission);
+      }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [notifPermission]);
+
   const dirty =
-    displayName !== (user.displayName || "") || photoURL !== (user.photoURL || "");
+    displayName !== (user.displayName || "") ||
+    photoURL !== (user.photoURL || "");
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -66,6 +85,31 @@ function ProfilePage() {
     }
   };
 
+  const handleEnableNotifications = async () => {
+    if (!("Notification" in window)) return;
+    setNotifBusy(true);
+    try {
+      const result = await Notification.requestPermission();
+      setNotifPermission(result);
+      if (result === "granted") {
+        // Notificação de teste rápida
+        try {
+          const n = new Notification("Telegram Clone", {
+            body: "Notificações ativadas com sucesso!",
+            tag: "test",
+          });
+          setTimeout(() => n.close(), 3000);
+        } catch (e) {
+          // ignorar se o navegador não permitir teste
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setNotifBusy(false);
+    }
+  };
+
   const handleLogout = async () => {
     await logout();
     navigate("/login", { replace: true });
@@ -84,7 +128,7 @@ function ProfilePage() {
         <h1 className="text-lg font-semibold">Meu perfil</h1>
       </header>
 
-      <div className="max-w-md mx-auto p-6">
+      <div className="max-w-md mx-auto p-6 w-full">
         <div className="flex flex-col items-center mb-8">
           <div className="relative">
             <Avatar
@@ -162,6 +206,59 @@ function ProfilePage() {
           </button>
         </form>
 
+        <section className="mt-8 pt-6 border-t border-slate-800">
+          <div className="flex items-center gap-2 mb-3">
+            <BellIcon className="text-slate-400" />
+            <h3 className="text-sm font-medium text-slate-300">
+              Notificações
+            </h3>
+          </div>
+
+          {notifPermission === "unsupported" && (
+            <p className="text-sm text-slate-500">
+              Seu navegador não suporta notificações.
+            </p>
+          )}
+
+          {notifPermission === "granted" && (
+            <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3 flex items-center gap-2">
+              <CheckIcon className="text-green-400" />
+              <p className="text-sm text-green-400">
+                Notificações ativadas. Você receberá avisos quando chegar
+                mensagem nova.
+              </p>
+            </div>
+          )}
+
+          {notifPermission === "default" && (
+            <>
+              <p className="text-sm text-slate-400 mb-3">
+                Ative para receber avisos do sistema quando chegar mensagem
+                nova com a aba em segundo plano.
+              </p>
+              <button
+                type="button"
+                onClick={handleEnableNotifications}
+                disabled={notifBusy}
+                className="w-full py-3 bg-sky-500 hover:bg-sky-600 disabled:opacity-50 text-white font-semibold rounded-lg transition flex items-center justify-center gap-2"
+              >
+                <BellIcon />{" "}
+                {notifBusy ? "Aguardando..." : "Ativar notificações"}
+              </button>
+            </>
+          )}
+
+          {notifPermission === "denied" && (
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 text-sm text-amber-400">
+              <p className="font-medium mb-1">Notificações bloqueadas</p>
+              <p className="text-xs">
+                Habilite manualmente no cadeado da barra de endereço do
+                navegador → Permissões do site → Notificações → Permitir.
+              </p>
+            </div>
+          )}
+        </section>
+
         <hr className="my-8 border-slate-800" />
 
         <button
@@ -189,6 +286,43 @@ function CameraIcon() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
       <circle cx="12" cy="13" r="4" />
+    </svg>
+  );
+}
+
+function BellIcon({ className }) {
+  return (
+    <svg
+      className={className}
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+    </svg>
+  );
+}
+
+function CheckIcon({ className }) {
+  return (
+    <svg
+      className={className}
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <polyline points="20 6 9 17 4 12" />
     </svg>
   );
 }

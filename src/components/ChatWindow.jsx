@@ -41,7 +41,9 @@ function ChatWindow({ chat, onBack, onGroupLeft }) {
     if (!q) return [];
     const norm = normalize(q);
     return messages
-      .filter((m) => m.text && normalize(m.text).includes(norm))
+      .filter(
+        (m) => !m.system && m.text && normalize(m.text).includes(norm)
+      )
       .map((m) => m.id);
   }, [searchQuery, messages]);
 

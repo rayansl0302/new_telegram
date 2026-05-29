@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import MessageBubble from "./MessageBubble";
+import SystemMessage from "./SystemMessage";
 
 function MessageList({
   messages,
@@ -36,6 +37,9 @@ function MessageList({
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-2">
       {messages.map((msg) => {
+        if (msg.system) {
+          return <SystemMessage key={msg.id} message={msg} />;
+        }
         const isOwn = msg.senderId === currentUserId;
         const senderInfo =
           isGroup && !isOwn ? chat.participantInfo?.[msg.senderId] : null;

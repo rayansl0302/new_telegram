@@ -2,7 +2,7 @@ import Avatar from "./Avatar";
 
 function ChatListItem({ chat, currentUserId, isSelected, isUnread, onClick }) {
   const isGroup = chat.type === "group";
-  const { name, photoURL, lastMessageText } = getDisplay(
+  const { name, photoURL, lastMessageText, lastMessageItalic } = getDisplay(
     chat,
     currentUserId,
     isGroup
@@ -39,7 +39,7 @@ function ChatListItem({ chat, currentUserId, isSelected, isUnread, onClick }) {
           <p
             className={`text-sm truncate flex-1 ${
               isUnread ? "text-white font-medium" : "text-slate-400"
-            }`}
+            } ${lastMessageItalic ? "italic" : ""}`}
           >
             {lastMessageText}
           </p>
@@ -58,17 +58,25 @@ function getDisplay(chat, currentUserId, isGroup) {
     const photoURL = chat.photoURL;
 
     let lastMessageText;
+    let lastMessageItalic = false;
     if (chat.lastMessage) {
-      const senderId = chat.lastMessage.senderId;
-      const isOwn = senderId === currentUserId;
-      const senderName = isOwn
-        ? "Você"
-        : (chat.participantInfo?.[senderId]?.displayName || "Alguém").split(" ")[0];
-      lastMessageText = `${senderName}: ${chat.lastMessage.text}`;
+      if (chat.lastMessage.system) {
+        lastMessageText = chat.lastMessage.text;
+        lastMessageItalic = true;
+      } else {
+        const senderId = chat.lastMessage.senderId;
+        const isOwn = senderId === currentUserId;
+        const senderName = isOwn
+          ? "Você"
+          : (chat.participantInfo?.[senderId]?.displayName || "Alguém").split(
+              " "
+            )[0];
+        lastMessageText = `${senderName}: ${chat.lastMessage.text}`;
+      }
     } else {
       lastMessageText = `${chat.participants.length} membros`;
     }
-    return { name, photoURL, lastMessageText };
+    return { name, photoURL, lastMessageText, lastMessageItalic };
   }
 
   const otherId = chat.participants.find((p) => p !== currentUserId);
@@ -77,6 +85,7 @@ function getDisplay(chat, currentUserId, isGroup) {
     name: info.displayName || info.email || "Usuário",
     photoURL: info.photoURL,
     lastMessageText: chat.lastMessage?.text || "Nenhuma mensagem ainda",
+    lastMessageItalic: false,
   };
 }
 

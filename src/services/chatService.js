@@ -13,7 +13,7 @@ import {
   arrayRemove,
   deleteField,
 } from "firebase/firestore";
-import { db } from "./firebase";
+import { auth, db } from "./firebase";
 
 export const getChatId = (uid1, uid2) => [uid1, uid2].sort().join("_");
 
@@ -24,6 +24,38 @@ export const findUserByEmail = async (email) => {
   if (snap.empty) return null;
   return snap.docs[0].data();
 };
+
+// --- Helpers internos ---
+
+function getActorName() {
+  const u = auth.currentUser;
+  if (!u) return "Alguém";
+  return u.displayName || u.email?.split("@")[0] || "Alguém";
+}
+
+async function addSystemMessage(chatId, text) {
+  const u = auth.currentUser;
+  if (!u || !text) return;
+  const messagesRef = collection(db, "chats", chatId, "messages");
+  await addDoc(messagesRef, {
+    system: true,
+    senderId: u.uid,
+    text,
+    createdAt: serverTimestamp(),
+  });
+  const chatRef = doc(db, "chats", chatId);
+  await updateDoc(chatRef, {
+    lastMessage: {
+      text,
+      senderId: u.uid,
+      system: true,
+      createdAt: serverTimestamp(),
+    },
+    updatedAt: serverTimestamp(),
+  });
+}
+
+// --- API pública ---
 
 export const createOrGetChat = async (currentUser, otherUser) => {
   const chatId = getChatId(currentUser.uid, otherUser.uid);
@@ -80,6 +112,13 @@ export const createGroup = async (currentUser, { name, photoURL, members }) => {
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+
+  const creator = currentUser.displayName || currentUser.email || "Alguém";
+  await addSystemMessage(
+    newGroupRef.id,
+    `${creator} criou o grupo "${name.trim()}"`
+  );
+
   return newGroupRef.id;
 };
 
@@ -88,6 +127,9 @@ export const updateGroupInfo = async (chatId, { name, photoURL }) => {
   if (name !== undefined) updates.name = name.trim();
   if (photoURL !== undefined) updates.photoURL = photoURL || null;
   await updateDoc(doc(db, "chats", chatId), updates);
+  // Notify in chat
+  const actor = getActorName();
+  await addSystemMessage(chatId, `${actor} atualizou os dados do grupo`);
 };
 
 export const addGroupMember = async (chatId, member) => {
@@ -108,6 +150,10 @@ export const addGroupMember = async (chatId, member) => {
     },
     updatedAt: serverTimestamp(),
   });
+
+  const actor = getActorName();
+  const memberName = member.displayName || member.email;
+  await addSystemMessage(chatId, `${actor} adicionou ${memberName} ao grupo`);
 };
 
 export const removeGroupMember = async (chatId, uid) => {
@@ -135,6 +181,18 @@ export const removeGroupMember = async (chatId, uid) => {
     );
   }
 
+  // Adiciona mensagem de sistema ANTES de remover o usuário,
+  // senão a regra do Firestore bloqueia (senderId precisa estar em participants).
+  const isSelf = uid === auth.currentUser?.uid;
+  const memberInfo = data.participantInfo?.[uid] || {};
+  const memberName =
+    memberInfo.displayName || memberInfo.email || "um membro";
+  const actor = getActorName();
+  const systemText = isSelf
+    ? `${actor} saiu do grupo`
+    : `${actor} removeu ${memberName} do grupo`;
+  await addSystemMessage(chatId, systemText);
+
   await updateDoc(chatRef, {
     participants: arrayRemove(uid),
     admins: arrayRemove(uid),
@@ -161,6 +219,12 @@ export const promoteToAdmin = async (chatId, uid) => {
     admins: arrayUnion(uid),
     updatedAt: serverTimestamp(),
   });
+
+  const memberInfo = data.participantInfo?.[uid] || {};
+  const memberName =
+    memberInfo.displayName || memberInfo.email || "um membro";
+  const actor = getActorName();
+  await addSystemMessage(chatId, `${actor} tornou ${memberName} administrador`);
 };
 
 export const demoteFromAdmin = async (chatId, uid) => {
@@ -169,7 +233,8 @@ export const demoteFromAdmin = async (chatId, uid) => {
   if (!snap.exists() || snap.data().type !== "group") {
     throw new Error("Grupo não encontrado");
   }
-  const admins = snap.data().admins || [];
+  const data = snap.data();
+  const admins = data.admins || [];
   if (!admins.includes(uid)) {
     throw new Error("Usuário não é administrador");
   }
@@ -182,18 +247,28 @@ export const demoteFromAdmin = async (chatId, uid) => {
     admins: arrayRemove(uid),
     updatedAt: serverTimestamp(),
   });
+
+  const memberInfo = data.participantInfo?.[uid] || {};
+  const memberName =
+    memberInfo.displayName || memberInfo.email || "um admin";
+  const actor = getActorName();
+  await addSystemMessage(
+    chatId,
+    `${actor} removeu ${memberName} como administrador`
+  );
 };
 
 export const sendMessage = async (
   chatId,
   senderId,
-  { text, imageUrl, replyTo } = {}
+  { text, imageUrl, audioUrl, replyTo } = {}
 ) => {
   const messagesRef = collection(db, "chats", chatId, "messages");
   const messageData = {
     senderId,
     text: text || "",
     imageUrl: imageUrl || null,
+    audioUrl: audioUrl || null,
     createdAt: serverTimestamp(),
   };
   if (replyTo) {
@@ -207,10 +282,15 @@ export const sendMessage = async (
   }
   await addDoc(messagesRef, messageData);
 
+  const previewText =
+    text ||
+    (imageUrl ? "[Imagem]" : "") ||
+    (audioUrl ? "[Áudio]" : "");
+
   const chatRef = doc(db, "chats", chatId);
   await updateDoc(chatRef, {
     lastMessage: {
-      text: text || (imageUrl ? "[Imagem]" : ""),
+      text: previewText,
       senderId,
       createdAt: serverTimestamp(),
     },
