@@ -15,6 +15,7 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
   const [recording, setRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [showCamera, setShowCamera] = useState(false);
+  const [attachOpen, setAttachOpen] = useState(false);
 
   const imageFileRef = useRef(null);
   const docFileRef = useRef(null);
@@ -43,19 +44,15 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
     const trimmed = text.trim();
     if (!trimmed) return;
 
-    // Otimista: limpa o input na hora, permite digitar a próxima mensagem.
-    // O Firestore local cache já mostra a mensagem imediatamente.
     const replySnap = replyingTo;
     setText("");
     onCancelReply?.();
 
-    // Envia em background — sem await, sem busy state pra texto.
     sendMessage(chatId, senderId, {
       text: trimmed,
       replyTo: replySnap || undefined,
     }).catch((err) => {
       console.error("Falha ao enviar:", err);
-      // Restaura o texto só se o usuário ainda não tiver digitado algo novo.
       setText((current) => current || trimmed);
       alert("Erro ao enviar a mensagem. Tente novamente.");
     });
@@ -239,6 +236,21 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
     return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
   };
 
+  const closeAttachMenu = () => setAttachOpen(false);
+
+  const handlePickImage = () => {
+    closeAttachMenu();
+    imageFileRef.current?.click();
+  };
+  const handlePickDoc = () => {
+    closeAttachMenu();
+    docFileRef.current?.click();
+  };
+  const handleOpenCamera = () => {
+    closeAttachMenu();
+    setShowCamera(true);
+  };
+
   return (
     <div className="border-t border-slate-800 bg-slate-950/95 backdrop-blur shrink-0">
       {replyingTo && (
@@ -267,27 +279,29 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
       )}
 
       {recording ? (
-        <div className="p-3 flex items-center gap-2">
+        <div className="p-2 md:p-3 flex items-center gap-2">
           <button
             type="button"
             onClick={cancelRecording}
-            className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition"
+            className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition flex-shrink-0"
             title="Cancelar gravação"
             aria-label="Cancelar gravação"
           >
             <TrashIcon />
           </button>
-          <div className="flex-1 flex items-center gap-2 bg-slate-800 rounded-full px-4 py-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
-            <span className="text-sm text-slate-200 tabular-nums">
+          <div className="flex-1 min-w-0 flex items-center gap-2 bg-slate-800 rounded-full px-3 md:px-4 py-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
+            <span className="text-sm text-slate-200 tabular-nums flex-shrink-0">
               {formatRecordTime(recordSeconds)}
             </span>
-            <span className="flex-1 text-sm text-slate-500">Gravando...</span>
+            <span className="flex-1 text-sm text-slate-500 truncate">
+              Gravando...
+            </span>
           </div>
           <button
             type="button"
             onClick={stopAndSend}
-            className="p-2 bg-sky-500 hover:bg-sky-600 text-white rounded-full transition"
+            className="p-2 bg-sky-500 hover:bg-sky-600 text-white rounded-full transition flex-shrink-0"
             title="Parar e enviar"
             aria-label="Parar e enviar"
           >
@@ -295,37 +309,36 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
           </button>
         </div>
       ) : (
-        <form onSubmit={handleSubmit} className="p-3 flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => imageFileRef.current?.click()}
-            disabled={busy}
-            className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition disabled:opacity-50"
-            title="Anexar imagem"
-            aria-label="Anexar imagem"
-          >
-            <AttachIcon />
-          </button>
-          <button
-            type="button"
-            onClick={() => docFileRef.current?.click()}
-            disabled={busy}
-            className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition disabled:opacity-50"
-            title="Enviar documento"
-            aria-label="Enviar documento"
-          >
-            <DocIcon />
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowCamera(true)}
-            disabled={busy}
-            className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition disabled:opacity-50"
-            title="Tirar foto"
-            aria-label="Tirar foto com a câmera"
-          >
-            <CameraIcon />
-          </button>
+        <form
+          onSubmit={handleSubmit}
+          className="p-2 md:p-3 flex items-center gap-1.5 md:gap-2"
+        >
+          <div className="relative flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => setAttachOpen((s) => !s)}
+              disabled={busy}
+              className={`p-2 rounded-full transition disabled:opacity-50 ${
+                attachOpen
+                  ? "bg-sky-500/15 text-sky-400 rotate-45"
+                  : "text-slate-400 hover:text-white hover:bg-slate-800"
+              }`}
+              title="Anexar"
+              aria-label="Abrir menu de anexos"
+              aria-expanded={attachOpen}
+            >
+              <PlusIcon />
+            </button>
+            {attachOpen && (
+              <AttachMenu
+                onClose={closeAttachMenu}
+                onPickImage={handlePickImage}
+                onPickDoc={handlePickDoc}
+                onOpenCamera={handleOpenCamera}
+              />
+            )}
+          </div>
+
           <input
             ref={imageFileRef}
             type="file"
@@ -340,6 +353,7 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
             onChange={handleDocFile}
             className="hidden"
           />
+
           <input
             ref={textRef}
             type="text"
@@ -348,12 +362,13 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
             }
             value={text}
             onChange={(e) => setText(e.target.value)}
-            className="flex-1 px-4 py-2 bg-slate-800 border border-slate-700 rounded-full text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 min-w-0"
+            className="flex-1 min-w-0 px-3 md:px-4 py-2 bg-slate-800 border border-slate-700 rounded-full text-white placeholder-slate-500 focus:outline-none focus:border-sky-500"
           />
+
           {text.trim() ? (
             <button
               type="submit"
-              className="p-2 bg-sky-500 hover:bg-sky-600 text-white rounded-full transition"
+              className="p-2 bg-sky-500 hover:bg-sky-600 text-white rounded-full transition flex-shrink-0"
               aria-label="Enviar"
               title="Enviar"
             >
@@ -364,7 +379,7 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
               type="button"
               onClick={startRecording}
               disabled={busy}
-              className="p-2 bg-sky-500 hover:bg-sky-600 disabled:opacity-30 text-white rounded-full transition"
+              className="p-2 bg-sky-500 hover:bg-sky-600 disabled:opacity-30 text-white rounded-full transition flex-shrink-0"
               aria-label="Gravar áudio"
               title="Gravar áudio"
             >
@@ -384,17 +399,113 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
   );
 }
 
-function AttachIcon() {
+function AttachMenu({ onClose, onPickImage, onPickDoc, onOpenCamera }) {
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onClose]);
+
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+    <>
+      <div
+        className="fixed inset-0 z-30"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div
+        className="absolute bottom-full left-0 mb-2 bg-slate-800 rounded-2xl shadow-xl border border-slate-700 p-1.5 z-40 min-w-[180px]"
+        role="menu"
+      >
+        <MenuItem
+          onClick={onOpenCamera}
+          icon={<CameraIcon />}
+          label="Câmera"
+          color="text-violet-400"
+        />
+        <MenuItem
+          onClick={onPickImage}
+          icon={<ImageIcon />}
+          label="Imagem"
+          color="text-sky-400"
+        />
+        <MenuItem
+          onClick={onPickDoc}
+          icon={<DocIcon />}
+          label="Documento"
+          color="text-amber-400"
+        />
+      </div>
+    </>
+  );
+}
+
+function MenuItem({ onClick, icon, label, color }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-700 rounded-lg w-full text-left transition"
+      role="menuitem"
+    >
+      <span className={`${color} flex-shrink-0`}>{icon}</span>
+      <span className="text-sm text-slate-100">{label}</span>
+    </button>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg
+      width="22"
+      height="22"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="transition-transform"
+    >
+      <line x1="12" y1="5" x2="12" y2="19" />
+      <line x1="5" y1="12" x2="19" y2="12" />
+    </svg>
+  );
+}
+
+function ImageIcon() {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <polyline points="21 15 16 10 5 21" />
     </svg>
   );
 }
 
 function DocIcon() {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
       <polyline points="14 2 14 8 20 8" />
       <line x1="9" y1="13" x2="15" y2="13" />
@@ -405,7 +516,16 @@ function DocIcon() {
 
 function CameraIcon() {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
       <circle cx="12" cy="13" r="4" />
     </svg>
