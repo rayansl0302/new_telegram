@@ -19,11 +19,16 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Shell principal: respeita notch, status bar e home indicator (PWA iOS) */
+/* Shell principal: respeita notch, status bar e home indicator (PWA iOS).
+   Em Android: --app-vh nunca é definido (setupIOSViewportFix() ignora),
+   então cai pra 100dvh, que é o comportamento que já funcionava lá.
+   Em iOS: --app-vh é sincronizado com visualViewport.height, então
+   o teclado faz o shell encolher e o input cola na parte superior do
+   teclado. */
 .app-shell {
   box-sizing: border-box;
-  height: 100dvh;
-  max-height: 100dvh;
+  height: var(--app-vh, 100dvh);
+  max-height: var(--app-vh, 100dvh);
   padding-top: var(--safe-top);
   padding-right: var(--safe-right);
   padding-bottom: var(--safe-bottom);
@@ -33,7 +38,7 @@ body {
 /* Telas full-page (login, perfil, loading) */
 .page-screen {
   box-sizing: border-box;
-  min-height: 100dvh;
+  min-height: var(--app-vh, 100dvh);
   padding-top: var(--safe-top);
   padding-right: var(--safe-right);
   padding-bottom: var(--safe-bottom);
