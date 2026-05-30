@@ -42,8 +42,16 @@ function CameraCapture({ onCapture, onClose }) {
         audio: false,
       });
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
+      const videoEl = videoRef.current;
+      if (videoEl) {
+        videoEl.srcObject = stream;
+        // iOS PWA / Safari às vezes ignora autoPlay mesmo com muted.
+        // Força play() explicitamente — sem isso o preview fica preto.
+        try {
+          await videoEl.play();
+        } catch (e) {
+          console.warn("video.play() falhou:", e);
+        }
       }
     } catch (err) {
       console.error(err);
