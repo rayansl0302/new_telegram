@@ -6,7 +6,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { createPortal } from "react-dom";
 import { CallSession, rejectIncomingCall } from "../services/callService";
 import { useAuth } from "./AuthContext";
 import { useIncomingCalls } from "../hooks/useIncomingCalls";
@@ -18,40 +17,80 @@ const CallContext = createContext({
   activeCall: null,
 });
 
+function translateError(err) {
+  const name = err?.name || "";
+  const code = err?.code || "";
+  if (name === "NotAllowedError" || code === "permission-denied") {
+    return "Permissão de microfone/câmera foi negada. Habilite nas configurações do navegador.";
+  }
+  if (name === "NotFoundError") {
+    return "Nenhum microfone ou câmera detectado neste dispositivo.";
+  }
+  if (name === "NotReadableError") {
+    return "O microfone/câmera está em uso por outro aplicativo.";
+  }
+  if (name === "OverconstrainedError") {
+    return "Câmera/microfone não suporta a configuração solicitada.";
+  }
+  if (name === "SecurityError") {
+    return "Acesso bloqueado por motivo de segurança (precisa de HTTPS).";
+  }
+  return err?.message || "Erro desconhecido ao iniciar a chamada.";
+}
+
 export function CallProvider({ children }) {
   const { user } = useAuth();
   const incoming = useIncomingCalls(user?.uid);
 
-  // activeCall: { session, type, peer, role, status }
+  // activeCall: { session, type, peer, role, status, error }
   const [activeCall, setActiveCall] = useState(null);
   const [ringTone, setRingTone] = useState(false);
   const ringIntervalRef = useRef(null);
 
+  const closeActiveCall = useCallback(() => {
+    setActiveCall((curr) => {
+      try {
+        curr?.session?.cleanup();
+      } catch (e) {
+        // ignora
+      }
+      return null;
+    });
+  }, []);
+
   const startCall = useCallback(
     async (peer, type = "audio") => {
       if (!user) return;
-      if (activeCall) return; // já em chamada
+      if (activeCall) return;
 
       const session = new CallSession();
-      const callState = {
+      const initialState = {
         session,
         type,
         peer,
         role: "caller",
-        status: "ringing",
+        status: "connecting",
+        error: null,
       };
+
       session.onStatusChange = (status) => {
         setActiveCall((curr) => (curr ? { ...curr, status } : null));
-        if (
-          status === "ended" ||
-          status === "rejected" ||
-          status === "failed"
-        ) {
-          setActiveCall(null);
+        if (status === "rejected") {
+          setTimeout(() => closeActiveCall(), 1500);
+        }
+        if (status === "failed") {
+          setActiveCall((curr) =>
+            curr
+              ? { ...curr, error: "A conexão falhou. Tente novamente." }
+              : null
+          );
+        }
+        if (status === "ended") {
+          closeActiveCall();
         }
       };
 
-      setActiveCall(callState);
+      setActiveCall(initialState);
       try {
         await session.startCall(
           {
@@ -63,22 +102,28 @@ export function CallProvider({ children }) {
           peer,
           type
         );
-      } catch (err) {
-        console.error("startCall falhou:", err);
-        session.cleanup();
-        setActiveCall(null);
-        alert(
-          "Não foi possível iniciar a chamada. Verifique permissões de microfone/câmera."
+        setActiveCall((curr) =>
+          curr ? { ...curr, status: "ringing" } : null
         );
+      } catch (err) {
+        console.error("[startCall] falhou:", err);
+        const msg = translateError(err);
+        setActiveCall((curr) => (curr ? { ...curr, error: msg } : null));
+        try {
+          session.cleanup();
+        } catch (e) {
+          // ignora
+        }
       }
     },
-    [user, activeCall]
+    [user, activeCall, closeActiveCall]
   );
 
   const answerIncoming = useCallback(async () => {
     if (!incoming || activeCall) return;
+
     const session = new CallSession();
-    const callState = {
+    const initialState = {
       session,
       type: incoming.type,
       peer: {
@@ -88,30 +133,35 @@ export function CallProvider({ children }) {
       },
       role: "callee",
       status: "connecting",
+      error: null,
     };
+
     session.onStatusChange = (status) => {
       setActiveCall((curr) => (curr ? { ...curr, status } : null));
-      if (
-        status === "ended" ||
-        status === "rejected" ||
-        status === "failed"
-      ) {
-        setActiveCall(null);
+      if (status === "failed") {
+        setActiveCall((curr) =>
+          curr ? { ...curr, error: "A conexão falhou." } : null
+        );
+      }
+      if (status === "ended" || status === "rejected") {
+        closeActiveCall();
       }
     };
 
-    setActiveCall(callState);
+    setActiveCall(initialState);
     try {
       await session.answerCall(incoming.id);
     } catch (err) {
-      console.error("answerCall falhou:", err);
-      session.cleanup();
-      setActiveCall(null);
-      alert(
-        "Não foi possível atender a chamada. Verifique permissões de microfone/câmera."
-      );
+      console.error("[answerCall] falhou:", err);
+      const msg = translateError(err);
+      setActiveCall((curr) => (curr ? { ...curr, error: msg } : null));
+      try {
+        session.cleanup();
+      } catch (e) {
+        // ignora
+      }
     }
-  }, [incoming, activeCall]);
+  }, [incoming, activeCall, closeActiveCall]);
 
   const rejectIncoming = useCallback(async () => {
     if (!incoming) return;
@@ -122,7 +172,7 @@ export function CallProvider({ children }) {
     }
   }, [incoming]);
 
-  // Toca ringtone enquanto há chamada recebida
+  // Toca ringtone enquanto há chamada recebida não atendida
   useEffect(() => {
     setRingTone(Boolean(incoming) && !activeCall);
   }, [incoming, activeCall]);
@@ -167,6 +217,16 @@ export function CallProvider({ children }) {
     };
   }, [ringTone]);
 
+  const handleEndCall = useCallback(async () => {
+    if (!activeCall) return;
+    try {
+      await activeCall.session?.endCall();
+    } catch (e) {
+      // ignora
+    }
+    closeActiveCall();
+  }, [activeCall, closeActiveCall]);
+
   return (
     <CallContext.Provider value={{ startCall, activeCall }}>
       {children}
@@ -178,13 +238,7 @@ export function CallProvider({ children }) {
         />
       )}
       {activeCall && (
-        <CallScreen
-          callState={activeCall}
-          onEnd={() => {
-            activeCall.session?.endCall();
-            setActiveCall(null);
-          }}
-        />
+        <CallScreen callState={activeCall} onEnd={handleEndCall} />
       )}
     </CallContext.Provider>
   );
@@ -192,9 +246,4 @@ export function CallProvider({ children }) {
 
 export function useCall() {
   return useContext(CallContext);
-}
-
-// Utilitário para componentes que querem só o portal
-export function CallPortal({ children }) {
-  return createPortal(children, document.body);
 }

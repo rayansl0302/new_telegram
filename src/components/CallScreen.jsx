@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import Avatar from "./Avatar";
 
 function CallScreen({ callState, onEnd }) {
-  const { session, type, peer, role, status } = callState;
+  const { session, type, peer, role, status, error } = callState;
   const isVideo = type === "video";
 
   const localVideoRef = useRef(null);
@@ -14,15 +14,17 @@ function CallScreen({ callState, onEnd }) {
   const [elapsedSec, setElapsedSec] = useState(0);
   const timerRef = useRef(null);
 
-  // Conecta streams aos elementos
+  // Conecta streams aos elementos sempre que mudarem
   useEffect(() => {
-    session.onLocalStream = (stream) => {
+    if (!session) return;
+
+    const attachLocal = (stream) => {
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
         localVideoRef.current.play().catch(() => {});
       }
     };
-    session.onRemoteStream = (stream) => {
+    const attachRemote = (stream) => {
       if (isVideo && remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = stream;
         remoteVideoRef.current.play().catch(() => {});
@@ -32,21 +34,15 @@ function CallScreen({ callState, onEnd }) {
         remoteAudioRef.current.play().catch(() => {});
       }
     };
-    if (session.localStream && localVideoRef.current) {
-      localVideoRef.current.srcObject = session.localStream;
-      localVideoRef.current.play().catch(() => {});
-    }
-    if (session.remoteStream) {
-      if (isVideo && remoteVideoRef.current) {
-        remoteVideoRef.current.srcObject = session.remoteStream;
-      }
-      if (remoteAudioRef.current) {
-        remoteAudioRef.current.srcObject = session.remoteStream;
-      }
-    }
+
+    session.onLocalStream = attachLocal;
+    session.onRemoteStream = attachRemote;
+
+    // Se os streams já existem (race), conecta agora
+    if (session.localStream) attachLocal(session.localStream);
+    if (session.remoteStream) attachRemote(session.remoteStream);
   }, [session, isVideo]);
 
-  // Timer quando conectado
   useEffect(() => {
     if (status === "connected" && !timerRef.current) {
       timerRef.current = setInterval(() => {
@@ -68,30 +64,35 @@ function CallScreen({ callState, onEnd }) {
   }, []);
 
   const handleMute = () => {
-    session.toggleMute();
+    session?.toggleMute();
     setMuted((m) => !m);
   };
 
   const handleVideoToggle = () => {
-    session.toggleVideo();
+    session?.toggleVideo();
     setVideoOff((v) => !v);
   };
 
   const statusLabel = (() => {
+    if (error) return error;
     if (status === "connected") return formatTime(elapsedSec);
     if (status === "connecting") return "Conectando...";
+    if (status === "rejected") return "Chamada rejeitada";
+    if (status === "ended") return "Chamada encerrada";
+    if (status === "failed") return "Falha na conexão";
     if (role === "caller" && status === "ringing") return "Chamando...";
     return status || "";
   })();
 
   const peerName = peer?.displayName || peer?.email || "Usuário";
+  const hasError = Boolean(error);
 
   return createPortal(
     <div className="fixed inset-0 bg-slate-900 z-[80] flex flex-col text-white">
       <audio ref={remoteAudioRef} autoPlay playsInline />
 
-      {/* Vídeo remoto fullscreen */}
-      {isVideo && (
+      {/* Vídeo remoto fullscreen (só vídeo + conectado + sem erro) */}
+      {isVideo && !hasError && (
         <video
           ref={remoteVideoRef}
           autoPlay
@@ -100,26 +101,44 @@ function CallScreen({ callState, onEnd }) {
         />
       )}
 
-      {/* Overlay com info */}
       <div
         className={`absolute inset-0 ${
-          isVideo ? "bg-gradient-to-b from-black/60 via-transparent to-black/70" : ""
+          isVideo && !hasError
+            ? "bg-gradient-to-b from-black/60 via-transparent to-black/70"
+            : ""
         } flex flex-col`}
       >
         <header className="p-6 flex flex-col items-center text-center">
-          {!isVideo && (
+          {(!isVideo || hasError) && (
             <div className="mt-12 mb-6">
               <Avatar src={peer?.photoURL} name={peerName} size={160} />
             </div>
           )}
           <h2 className="text-2xl font-semibold">{peerName}</h2>
-          <p className="text-sm text-slate-300 mt-1">{statusLabel}</p>
+          <p
+            className={`text-sm mt-1 ${
+              hasError ? "text-red-400" : "text-slate-300"
+            }`}
+          >
+            {statusLabel}
+          </p>
+
+          {hasError && (
+            <div className="mt-6 max-w-sm bg-red-500/10 border border-red-500/30 rounded-lg p-4 text-sm text-red-300">
+              <p className="font-medium mb-1">Não foi possível conectar</p>
+              <p className="opacity-90">{error}</p>
+              <p className="text-xs text-red-400/70 mt-2">
+                Verifique as permissões no cadeado da barra de endereço ou
+                feche outros apps que estejam usando o microfone/câmera.
+              </p>
+            </div>
+          )}
         </header>
 
         <div className="flex-1" />
 
-        {/* Vídeo local PIP */}
-        {isVideo && (
+        {/* Vídeo local PIP (só se vídeo e sem erro) */}
+        {isVideo && !hasError && (
           <video
             ref={localVideoRef}
             autoPlay
@@ -131,21 +150,23 @@ function CallScreen({ callState, onEnd }) {
 
         {/* Controles */}
         <footer className="p-6 pb-10 flex items-center justify-center gap-4">
-          <button
-            type="button"
-            onClick={handleMute}
-            className={`p-4 rounded-full transition ${
-              muted
-                ? "bg-white text-slate-900"
-                : "bg-white/15 hover:bg-white/25 text-white backdrop-blur"
-            }`}
-            title={muted ? "Ativar som" : "Mutar"}
-            aria-label={muted ? "Ativar microfone" : "Mutar microfone"}
-          >
-            {muted ? <MicOffIcon /> : <MicIcon />}
-          </button>
+          {!hasError && (
+            <button
+              type="button"
+              onClick={handleMute}
+              className={`p-4 rounded-full transition ${
+                muted
+                  ? "bg-white text-slate-900"
+                  : "bg-white/15 hover:bg-white/25 text-white backdrop-blur"
+              }`}
+              title={muted ? "Ativar som" : "Mutar"}
+              aria-label={muted ? "Ativar microfone" : "Mutar microfone"}
+            >
+              {muted ? <MicOffIcon /> : <MicIcon />}
+            </button>
+          )}
 
-          {isVideo && (
+          {isVideo && !hasError && (
             <button
               type="button"
               onClick={handleVideoToggle}
@@ -165,8 +186,8 @@ function CallScreen({ callState, onEnd }) {
             type="button"
             onClick={onEnd}
             className="p-5 bg-red-500 hover:bg-red-600 rounded-full transition shadow-xl"
-            title="Encerrar"
-            aria-label="Encerrar chamada"
+            title={hasError ? "Fechar" : "Encerrar"}
+            aria-label={hasError ? "Fechar" : "Encerrar chamada"}
           >
             <HangupIcon />
           </button>
