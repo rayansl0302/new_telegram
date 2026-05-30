@@ -19,13 +19,11 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Shell principal: respeita notch, status bar e home indicator (PWA iOS).
-   Usa --app-vh (sincronizado via visualViewport em main.jsx) pra acompanhar
-   o teclado mobile. Cai pra 100dvh se o JS ainda não rodou. */
+/* Shell principal: respeita notch, status bar e home indicator (PWA iOS) */
 .app-shell {
   box-sizing: border-box;
-  height: var(--app-vh, 100dvh);
-  max-height: var(--app-vh, 100dvh);
+  height: 100dvh;
+  max-height: 100dvh;
   padding-top: var(--safe-top);
   padding-right: var(--safe-right);
   padding-bottom: var(--safe-bottom);
@@ -35,7 +33,7 @@ body {
 /* Telas full-page (login, perfil, loading) */
 .page-screen {
   box-sizing: border-box;
-  min-height: var(--app-vh, 100dvh);
+  min-height: 100dvh;
   padding-top: var(--safe-top);
   padding-right: var(--safe-right);
   padding-bottom: var(--safe-bottom);
