@@ -1,4 +1,5 @@
 import { useCall } from "../context/CallContext";
+import { useGroupCallStatus } from "../hooks/useGroupCallStatus";
 import Avatar from "./Avatar";
 
 function ChatHeader({
@@ -10,7 +11,8 @@ function ChatHeader({
   searchActive,
 }) {
   const isGroup = chat.type === "group";
-  const { startCall, activeCall } = useCall();
+  const { startCall, startGroupCall, joinGroupCall, activeCall } = useCall();
+  const groupActiveCall = useGroupCallStatus(isGroup ? chat.id : null);
 
   let name, photoURL, subtitle, otherInfo, otherId;
   if (isGroup) {
@@ -26,7 +28,7 @@ function ChatHeader({
     subtitle = otherInfo.email;
   }
 
-  const handleCall = (type) => {
+  const handleDirectCall = (type) => {
     if (isGroup || !otherId) return;
     if (activeCall) {
       alert("Você já está em uma chamada.");
@@ -43,6 +45,21 @@ function ChatHeader({
     );
   };
 
+  const handleGroupCall = (type) => {
+    if (!isGroup) return;
+    if (activeCall) {
+      alert("Você já está em uma chamada.");
+      return;
+    }
+    if (groupActiveCall) {
+      // Entra na chamada existente
+      joinGroupCall(groupActiveCall.id, chat, groupActiveCall.type);
+    } else {
+      // Inicia nova
+      startGroupCall(chat, type);
+    }
+  };
+
   const backButton = onBack ? (
     <button
       type="button"
@@ -54,61 +71,97 @@ function ChatHeader({
     </button>
   ) : null;
 
-  return (
-    <header className="px-3 md:px-4 py-2.5 md:py-3 border-b border-slate-800 flex items-center gap-2 md:gap-3 bg-slate-950/95 backdrop-blur shrink-0">
-      {backButton}
-      <button
-        type="button"
-        onClick={onOpenInfo}
-        className="flex items-center gap-3 flex-1 min-w-0 text-left hover:opacity-80 transition"
-        title={isGroup ? "Dados do grupo" : "Dados do contato"}
-      >
-        <Avatar src={photoURL} name={name} size={40} />
-        <div className="min-w-0 flex-1">
-          <p className="font-semibold truncate">{name}</p>
-          <p className="text-xs text-slate-500 truncate">{subtitle}</p>
-        </div>
-      </button>
+  const groupCallActive = isGroup && groupActiveCall;
+  const groupCallParticipantsCount = groupActiveCall
+    ? Object.keys(groupActiveCall.participants || {}).length
+    : 0;
 
-      {!isGroup && (
-        <>
+  return (
+    <header className="px-3 md:px-4 py-2.5 md:py-3 border-b border-slate-800 flex flex-col gap-1 bg-slate-950/95 backdrop-blur shrink-0">
+      <div className="flex items-center gap-2 md:gap-3">
+        {backButton}
+        <button
+          type="button"
+          onClick={onOpenInfo}
+          className="flex items-center gap-3 flex-1 min-w-0 text-left hover:opacity-80 transition"
+          title={isGroup ? "Dados do grupo" : "Dados do contato"}
+        >
+          <Avatar src={photoURL} name={name} size={40} />
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold truncate">{name}</p>
+            <p className="text-xs text-slate-500 truncate">{subtitle}</p>
+          </div>
+        </button>
+
+        {isGroup ? (
           <button
             type="button"
-            onClick={() => handleCall("audio")}
+            onClick={() => handleGroupCall("audio")}
             disabled={Boolean(activeCall)}
-            className="p-2 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition flex-shrink-0 disabled:opacity-30 disabled:cursor-not-allowed"
-            title="Chamada de voz"
-            aria-label="Iniciar chamada de voz"
+            className={`p-2 rounded-lg transition flex-shrink-0 disabled:opacity-30 disabled:cursor-not-allowed ${
+              groupCallActive
+                ? "text-emerald-300 bg-emerald-500/15 hover:bg-emerald-500/25"
+                : "text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10"
+            }`}
+            title={
+              groupCallActive ? "Entrar na chamada ativa" : "Iniciar chamada em grupo"
+            }
+            aria-label="Chamada em grupo"
           >
             <PhoneIcon />
           </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => handleDirectCall("audio")}
+              disabled={Boolean(activeCall)}
+              className="p-2 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition flex-shrink-0 disabled:opacity-30 disabled:cursor-not-allowed"
+              title="Chamada de voz"
+              aria-label="Iniciar chamada de voz"
+            >
+              <PhoneIcon />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDirectCall("video")}
+              disabled={Boolean(activeCall)}
+              className="p-2 text-slate-400 hover:text-sky-400 hover:bg-sky-500/10 rounded-lg transition flex-shrink-0 disabled:opacity-30 disabled:cursor-not-allowed"
+              title="Chamada de vídeo"
+              aria-label="Iniciar chamada de vídeo"
+            >
+              <VideoIcon />
+            </button>
+          </>
+        )}
+
+        {onToggleSearch && (
           <button
             type="button"
-            onClick={() => handleCall("video")}
-            disabled={Boolean(activeCall)}
-            className="p-2 text-slate-400 hover:text-sky-400 hover:bg-sky-500/10 rounded-lg transition flex-shrink-0 disabled:opacity-30 disabled:cursor-not-allowed"
-            title="Chamada de vídeo"
-            aria-label="Iniciar chamada de vídeo"
+            onClick={onToggleSearch}
+            className={`p-2 rounded-lg transition flex-shrink-0 ${
+              searchActive
+                ? "bg-sky-500/15 text-sky-400"
+                : "text-slate-400 hover:text-white hover:bg-slate-800"
+            }`}
+            title="Buscar nesta conversa"
+            aria-label="Buscar nesta conversa"
+            aria-pressed={searchActive ? "true" : "false"}
           >
-            <VideoIcon />
+            <SearchIcon />
           </button>
-        </>
-      )}
+        )}
+      </div>
 
-      {onToggleSearch && (
+      {groupCallActive && !activeCall && (
         <button
           type="button"
-          onClick={onToggleSearch}
-          className={`p-2 rounded-lg transition flex-shrink-0 ${
-            searchActive
-              ? "bg-sky-500/15 text-sky-400"
-              : "text-slate-400 hover:text-white hover:bg-slate-800"
-          }`}
-          title="Buscar nesta conversa"
-          aria-label="Buscar nesta conversa"
-          aria-pressed={searchActive ? "true" : "false"}
+          onClick={() => handleGroupCall(groupActiveCall.type)}
+          className="bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs rounded-md px-3 py-1.5 flex items-center gap-2 hover:bg-emerald-500/25 transition self-start"
         >
-          <SearchIcon />
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          Chamada em grupo ativa · {groupCallParticipantsCount} participante
+          {groupCallParticipantsCount !== 1 ? "s" : ""} · clique para entrar
         </button>
       )}
     </header>
@@ -117,16 +170,7 @@ function ChatHeader({
 
 function BackIcon() {
   return (
-    <svg
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <line x1="19" y1="12" x2="5" y2="12" />
       <polyline points="12 19 5 12 12 5" />
     </svg>
@@ -135,16 +179,7 @@ function BackIcon() {
 
 function PhoneIcon() {
   return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
     </svg>
   );
@@ -152,16 +187,7 @@ function PhoneIcon() {
 
 function VideoIcon() {
   return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <polygon points="23 7 16 12 23 17 23 7" />
       <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
     </svg>
@@ -170,16 +196,7 @@ function VideoIcon() {
 
 function SearchIcon() {
   return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="11" cy="11" r="8" />
       <line x1="21" y1="21" x2="16.65" y2="16.65" />
     </svg>

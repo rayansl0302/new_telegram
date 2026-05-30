@@ -7,13 +7,20 @@ import {
   useState,
 } from "react";
 import { CallSession, rejectIncomingCall } from "../services/callService";
+import {
+  createGroupCall,
+  GroupCallSession,
+} from "../services/groupCallService";
 import { useAuth } from "./AuthContext";
 import { useIncomingCalls } from "../hooks/useIncomingCalls";
 import CallScreen from "../components/CallScreen";
 import IncomingCallDialog from "../components/IncomingCallDialog";
+import GroupCallScreen from "../components/GroupCallScreen";
 
 const CallContext = createContext({
   startCall: () => {},
+  startGroupCall: () => {},
+  joinGroupCall: () => {},
   activeCall: null,
 });
 
@@ -42,7 +49,7 @@ export function CallProvider({ children }) {
   const { user } = useAuth();
   const incoming = useIncomingCalls(user?.uid);
 
-  // activeCall: { session, type, peer, role, status, error }
+  // activeCall: { kind: "direct" | "group", session, type, peer/chat, role/_, status, error }
   const [activeCall, setActiveCall] = useState(null);
   const [ringTone, setRingTone] = useState(false);
   const ringIntervalRef = useRef(null);
@@ -50,7 +57,7 @@ export function CallProvider({ children }) {
   const closeActiveCall = useCallback(() => {
     setActiveCall((curr) => {
       try {
-        curr?.session?.cleanup();
+        curr?.session?.cleanup?.();
       } catch (e) {
         // ignora
       }
@@ -58,13 +65,16 @@ export function CallProvider({ children }) {
     });
   }, []);
 
+  // ─────────────────────────────────────────────────────────────
+  // 1-on-1
+  // ─────────────────────────────────────────────────────────────
   const startCall = useCallback(
     async (peer, type = "audio") => {
-      if (!user) return;
-      if (activeCall) return;
+      if (!user || activeCall) return;
 
       const session = new CallSession();
       const initialState = {
+        kind: "direct",
         session,
         type,
         peer,
@@ -80,9 +90,7 @@ export function CallProvider({ children }) {
         }
         if (status === "failed") {
           setActiveCall((curr) =>
-            curr
-              ? { ...curr, error: "A conexão falhou. Tente novamente." }
-              : null
+            curr ? { ...curr, error: "A conexão falhou. Tente novamente." } : null
           );
         }
         if (status === "ended") {
@@ -102,9 +110,7 @@ export function CallProvider({ children }) {
           peer,
           type
         );
-        setActiveCall((curr) =>
-          curr ? { ...curr, status: "ringing" } : null
-        );
+        setActiveCall((curr) => (curr ? { ...curr, status: "ringing" } : null));
       } catch (err) {
         console.error("[startCall] falhou:", err);
         const msg = translateError(err);
@@ -124,6 +130,7 @@ export function CallProvider({ children }) {
 
     const session = new CallSession();
     const initialState = {
+      kind: "direct",
       session,
       type: incoming.type,
       peer: {
@@ -172,7 +179,113 @@ export function CallProvider({ children }) {
     }
   }, [incoming]);
 
-  // Toca ringtone enquanto há chamada recebida não atendida
+  // ─────────────────────────────────────────────────────────────
+  // Grupos
+  // ─────────────────────────────────────────────────────────────
+
+  const _joinGroupSession = useCallback(
+    async (callId, chat, type) => {
+      if (!user || activeCall) return;
+
+      const session = new GroupCallSession(callId, type, {
+        uid: user.uid,
+        displayName: user.displayName,
+        email: user.email,
+        photoURL: user.photoURL,
+      });
+      // Anexa info do user pro tile local
+      session.currentUser = {
+        uid: user.uid,
+        displayName: user.displayName,
+        email: user.email,
+        photoURL: user.photoURL,
+      };
+
+      const initialState = {
+        kind: "group",
+        session,
+        type,
+        chat,
+        status: "connecting",
+        error: null,
+      };
+
+      session.onStatusChange = (status) => {
+        setActiveCall((curr) => (curr ? { ...curr, status } : null));
+        if (status === "failed") {
+          setActiveCall((curr) =>
+            curr ? { ...curr, error: "A conexão falhou." } : null
+          );
+        }
+        if (status === "ended") {
+          closeActiveCall();
+        }
+      };
+
+      setActiveCall(initialState);
+      try {
+        await session.start();
+      } catch (err) {
+        console.error("[groupCall] start falhou:", err);
+        const msg = translateError(err);
+        setActiveCall((curr) => (curr ? { ...curr, error: msg } : null));
+        try {
+          session.cleanup();
+        } catch (e) {
+          // ignora
+        }
+      }
+    },
+    [user, activeCall, closeActiveCall]
+  );
+
+  const startGroupCall = useCallback(
+    async (chat, type = "audio") => {
+      if (!user || activeCall) return;
+      try {
+        const callId = await createGroupCall(chat.id, type, {
+          uid: user.uid,
+          displayName: user.displayName,
+          email: user.email,
+          photoURL: user.photoURL,
+        });
+        await _joinGroupSession(callId, chat, type);
+      } catch (err) {
+        console.error("[startGroupCall] falhou:", err);
+        alert("Erro ao iniciar chamada em grupo");
+      }
+    },
+    [user, activeCall, _joinGroupSession]
+  );
+
+  const joinGroupCall = useCallback(
+    async (callId, chat, type) => {
+      await _joinGroupSession(callId, chat, type);
+    },
+    [_joinGroupSession]
+  );
+
+  const handleLeave = useCallback(async () => {
+    if (!activeCall) return;
+    if (activeCall.kind === "group") {
+      try {
+        await activeCall.session?.leave();
+      } catch (e) {
+        // ignora
+      }
+    } else {
+      try {
+        await activeCall.session?.endCall();
+      } catch (e) {
+        // ignora
+      }
+    }
+    closeActiveCall();
+  }, [activeCall, closeActiveCall]);
+
+  // ─────────────────────────────────────────────────────────────
+  // Ringtone para chamadas 1-on-1 recebidas
+  // ─────────────────────────────────────────────────────────────
   useEffect(() => {
     setRingTone(Boolean(incoming) && !activeCall);
   }, [incoming, activeCall]);
@@ -217,18 +330,10 @@ export function CallProvider({ children }) {
     };
   }, [ringTone]);
 
-  const handleEndCall = useCallback(async () => {
-    if (!activeCall) return;
-    try {
-      await activeCall.session?.endCall();
-    } catch (e) {
-      // ignora
-    }
-    closeActiveCall();
-  }, [activeCall, closeActiveCall]);
-
   return (
-    <CallContext.Provider value={{ startCall, activeCall }}>
+    <CallContext.Provider
+      value={{ startCall, startGroupCall, joinGroupCall, activeCall }}
+    >
       {children}
       {ringTone && incoming && (
         <IncomingCallDialog
@@ -237,8 +342,11 @@ export function CallProvider({ children }) {
           onReject={rejectIncoming}
         />
       )}
-      {activeCall && (
-        <CallScreen callState={activeCall} onEnd={handleEndCall} />
+      {activeCall?.kind === "direct" && (
+        <CallScreen callState={activeCall} onEnd={handleLeave} />
+      )}
+      {activeCall?.kind === "group" && (
+        <GroupCallScreen callState={activeCall} onLeave={handleLeave} />
       )}
     </CallContext.Provider>
   );
