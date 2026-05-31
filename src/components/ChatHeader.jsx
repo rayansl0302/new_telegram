@@ -94,22 +94,43 @@ function ChatHeader({
         </button>
 
         {isGroup ? (
-          <button
-            type="button"
-            onClick={() => handleGroupCall("audio")}
-            disabled={Boolean(activeCall)}
-            className={`p-2 rounded-lg transition flex-shrink-0 disabled:opacity-30 disabled:cursor-not-allowed ${
-              groupCallActive
-                ? "text-emerald-300 bg-emerald-500/15 hover:bg-emerald-500/25"
-                : "text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10"
-            }`}
-            title={
-              groupCallActive ? "Entrar na chamada ativa" : "Iniciar chamada em grupo"
-            }
-            aria-label="Chamada em grupo"
-          >
-            <PhoneIcon />
-          </button>
+          groupCallActive ? (
+            // Já tem chamada ativa no grupo: 1 botão pra entrar com o tipo dela
+            <button
+              type="button"
+              onClick={() => handleGroupCall(groupActiveCall.type)}
+              disabled={Boolean(activeCall)}
+              className="p-2 text-emerald-300 bg-emerald-500/15 hover:bg-emerald-500/25 rounded-lg transition flex-shrink-0 disabled:opacity-30 disabled:cursor-not-allowed"
+              title="Entrar na chamada ativa"
+              aria-label="Entrar na chamada em grupo"
+            >
+              {groupActiveCall.type === "video" ? <VideoIcon /> : <PhoneIcon />}
+            </button>
+          ) : (
+            // Sem chamada ativa: 2 botões pra escolher áudio ou vídeo
+            <>
+              <button
+                type="button"
+                onClick={() => handleGroupCall("audio")}
+                disabled={Boolean(activeCall)}
+                className="p-2 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition flex-shrink-0 disabled:opacity-30 disabled:cursor-not-allowed"
+                title="Chamada de voz em grupo"
+                aria-label="Iniciar chamada de voz em grupo"
+              >
+                <PhoneIcon />
+              </button>
+              <button
+                type="button"
+                onClick={() => handleGroupCall("video")}
+                disabled={Boolean(activeCall)}
+                className="p-2 text-slate-400 hover:text-sky-400 hover:bg-sky-500/10 rounded-lg transition flex-shrink-0 disabled:opacity-30 disabled:cursor-not-allowed"
+                title="Chamada de vídeo em grupo"
+                aria-label="Iniciar chamada de vídeo em grupo"
+              >
+                <VideoIcon />
+              </button>
+            </>
+          )
         ) : (
           <>
             <button
