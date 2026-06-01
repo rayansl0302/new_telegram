@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { sendMessage } from "../services/chatService";
 import {
   uploadChatImage,
@@ -16,6 +17,7 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [showCamera, setShowCamera] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
 
   const imageFileRef = useRef(null);
   const docFileRef = useRef(null);
@@ -25,6 +27,10 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
   const audioStreamRef = useRef(null);
   const recordTimerRef = useRef(null);
   const cancelRecordingFlagRef = useRef(false);
+
+  // Refs pra valores reativos usados em handlers globais (paste/drop)
+  const stateRef = useRef({ chatId, senderId, replyingTo, busy });
+  stateRef.current = { chatId, senderId, replyingTo, busy };
 
   useEffect(() => {
     if (replyingTo) {
@@ -39,6 +45,142 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
     };
   }, []);
 
+  // ─────────────────────────────────────────────────────────────
+  // Upload genérico (usado por paste, drop, e botões)
+  // ─────────────────────────────────────────────────────────────
+  const uploadAndSendFile = useCallback(
+    async (file) => {
+      const { chatId, senderId, replyingTo, busy } = stateRef.current;
+      if (!file || !chatId || busy) return;
+
+      if (file.size > MAX_FILE_SIZE) {
+        alert("Arquivo muito grande (máximo 10 MB)");
+        return;
+      }
+
+      setBusy(true);
+      try {
+        if (file.type.startsWith("image/")) {
+          const url = await uploadChatImage(chatId, file);
+          await sendMessage(chatId, senderId, {
+            imageUrl: url,
+            replyTo: replyingTo || undefined,
+          });
+        } else {
+          const url = await uploadChatFile(chatId, file);
+          await sendMessage(chatId, senderId, {
+            file: {
+              url,
+              name: file.name || `arquivo-${Date.now()}`,
+              size: file.size,
+              type: file.type || "application/octet-stream",
+            },
+            replyTo: replyingTo || undefined,
+          });
+        }
+        onCancelReply?.();
+      } catch (err) {
+        console.error(err);
+        alert("Erro ao enviar arquivo");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [onCancelReply]
+  );
+
+  // ─────────────────────────────────────────────────────────────
+  // Paste (Ctrl+V) — imagem ou arquivo da clipboard
+  // ─────────────────────────────────────────────────────────────
+  useEffect(() => {
+    const onPaste = (e) => {
+      const { chatId, busy } = stateRef.current;
+      if (!chatId || busy) return;
+      const items = e.clipboardData?.items;
+      if (!items || items.length === 0) return;
+
+      // Procura primeiro item que é um arquivo (imagem da clipboard, etc.)
+      for (const item of items) {
+        if (item.kind === "file") {
+          const file = item.getAsFile();
+          if (file) {
+            e.preventDefault();
+            uploadAndSendFile(file);
+            return;
+          }
+        }
+      }
+      // Se não tem arquivo, deixa o paste normal de texto rolar
+    };
+
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+  }, [uploadAndSendFile]);
+
+  // ─────────────────────────────────────────────────────────────
+  // Drag & drop — arraste arquivos pra qualquer lugar do chat
+  // ─────────────────────────────────────────────────────────────
+  useEffect(() => {
+    let dragCounter = 0;
+
+    const containsFiles = (e) => {
+      const types = e.dataTransfer?.types;
+      if (!types) return false;
+      if (typeof types.contains === "function") return types.contains("Files");
+      return Array.from(types).includes("Files");
+    };
+
+    const onDragEnter = (e) => {
+      if (!containsFiles(e)) return;
+      e.preventDefault();
+      dragCounter++;
+      if (dragCounter > 0) setDragOver(true);
+    };
+
+    const onDragOver = (e) => {
+      if (!containsFiles(e)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+    };
+
+    const onDragLeave = (e) => {
+      if (!containsFiles(e)) return;
+      e.preventDefault();
+      dragCounter = Math.max(0, dragCounter - 1);
+      if (dragCounter === 0) setDragOver(false);
+    };
+
+    const onDrop = (e) => {
+      if (!containsFiles(e)) return;
+      e.preventDefault();
+      dragCounter = 0;
+      setDragOver(false);
+
+      const { chatId, busy } = stateRef.current;
+      if (!chatId || busy) return;
+
+      const files = Array.from(e.dataTransfer?.files || []);
+      if (files.length === 0) return;
+      // Por simplicidade, envia só o primeiro
+      uploadAndSendFile(files[0]);
+    };
+
+    document.addEventListener("dragenter", onDragEnter);
+    document.addEventListener("dragover", onDragOver);
+    document.addEventListener("dragleave", onDragLeave);
+    document.addEventListener("drop", onDrop);
+
+    return () => {
+      document.removeEventListener("dragenter", onDragEnter);
+      document.removeEventListener("dragover", onDragOver);
+      document.removeEventListener("dragleave", onDragLeave);
+      document.removeEventListener("drop", onDrop);
+    };
+  }, [uploadAndSendFile]);
+
+  // ─────────────────────────────────────────────────────────────
+  // Envio de texto (otimista, fire-and-forget)
+  // ─────────────────────────────────────────────────────────────
   const handleSubmit = (e) => {
     e.preventDefault();
     const trimmed = text.trim();
@@ -60,80 +202,25 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
 
   const handleImage = async (e) => {
     const file = e.target.files?.[0];
+    e.target.value = "";
     if (!file) return;
     if (!file.type.startsWith("image/")) {
       alert("Apenas imagens são suportadas neste botão");
-      e.target.value = "";
       return;
     }
-    if (file.size > MAX_FILE_SIZE) {
-      alert("Imagem muito grande (máximo 10 MB)");
-      e.target.value = "";
-      return;
-    }
-    setBusy(true);
-    try {
-      const url = await uploadChatImage(chatId, file);
-      await sendMessage(chatId, senderId, {
-        imageUrl: url,
-        replyTo: replyingTo || undefined,
-      });
-      onCancelReply?.();
-    } catch (err) {
-      console.error(err);
-      alert("Erro ao enviar imagem");
-    } finally {
-      setBusy(false);
-      e.target.value = "";
-    }
+    await uploadAndSendFile(file);
   };
 
   const handleDocFile = async (e) => {
     const file = e.target.files?.[0];
+    e.target.value = "";
     if (!file) return;
-    if (file.size > MAX_FILE_SIZE) {
-      alert("Arquivo muito grande (máximo 10 MB)");
-      e.target.value = "";
-      return;
-    }
-    setBusy(true);
-    try {
-      const url = await uploadChatFile(chatId, file);
-      await sendMessage(chatId, senderId, {
-        file: {
-          url,
-          name: file.name,
-          size: file.size,
-          type: file.type || "application/octet-stream",
-        },
-        replyTo: replyingTo || undefined,
-      });
-      onCancelReply?.();
-    } catch (err) {
-      console.error(err);
-      alert("Erro ao enviar arquivo");
-    } finally {
-      setBusy(false);
-      e.target.value = "";
-    }
+    await uploadAndSendFile(file);
   };
 
   const handleCameraCapture = async (file) => {
     setShowCamera(false);
-    setBusy(true);
-    try {
-      const url = await uploadChatImage(chatId, file);
-      await sendMessage(chatId, senderId, {
-        imageUrl: url,
-        replyTo: replyingTo || undefined,
-      });
-      onCancelReply?.();
-    } catch (err) {
-      console.error(err);
-      alert("Erro ao enviar foto");
-    } finally {
-      setBusy(false);
-    }
+    await uploadAndSendFile(file);
   };
 
   const startRecording = async () => {
@@ -358,7 +445,9 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
             ref={textRef}
             type="text"
             placeholder={
-              replyingTo ? "Escreva sua resposta..." : "Digite uma mensagem..."
+              replyingTo
+                ? "Escreva sua resposta..."
+                : "Digite, cole imagem ou arraste arquivo..."
             }
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -395,7 +484,26 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
           onClose={() => setShowCamera(false)}
         />
       )}
+
+      {dragOver && <DropOverlay />}
     </div>
+  );
+}
+
+function DropOverlay() {
+  return createPortal(
+    <div className="fixed inset-0 bg-sky-500/20 backdrop-blur-sm z-[75] flex items-center justify-center pointer-events-none">
+      <div className="bg-slate-800 border-2 border-dashed border-sky-400 rounded-3xl px-10 py-8 text-center shadow-2xl">
+        <UploadIcon className="w-16 h-16 text-sky-400 mx-auto mb-4" />
+        <p className="text-xl font-semibold text-white">
+          Solte o arquivo aqui
+        </p>
+        <p className="text-sm text-slate-400 mt-1">
+          Imagem, PDF, documento, planilha...
+        </p>
+      </div>
+    </div>,
+    document.body
   );
 }
 
@@ -477,16 +585,7 @@ function PlusIcon() {
 
 function ImageIcon() {
   return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
       <circle cx="8.5" cy="8.5" r="1.5" />
       <polyline points="21 15 16 10 5 21" />
@@ -496,16 +595,7 @@ function ImageIcon() {
 
 function DocIcon() {
   return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
       <polyline points="14 2 14 8 20 8" />
       <line x1="9" y1="13" x2="15" y2="13" />
@@ -516,16 +606,7 @@ function DocIcon() {
 
 function CameraIcon() {
   return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
       <circle cx="12" cy="13" r="4" />
     </svg>
@@ -568,6 +649,24 @@ function CloseSmallIcon() {
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <line x1="18" y1="6" x2="6" y2="18" />
       <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  );
+}
+
+function UploadIcon({ className }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="17 8 12 3 7 8" />
+      <line x1="12" y1="3" x2="12" y2="15" />
     </svg>
   );
 }
