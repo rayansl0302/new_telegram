@@ -21,6 +21,7 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
 
   const imageFileRef = useRef(null);
   const docFileRef = useRef(null);
+  const audioFileRef = useRef(null);
   const textRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -226,6 +227,34 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
     await uploadAndSendFile(file);
   };
 
+  // Path explícito de áudio: força uploadChatAudio independente do MIME.
+  // Garante que o arquivo SEMPRE vire mensagem de áudio com tocador inline.
+  const handleAudioFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !chatId || busy) return;
+
+    if (file.size > MAX_FILE_SIZE) {
+      alert("Arquivo muito grande (máximo 10 MB)");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const url = await uploadChatAudio(chatId, file);
+      await sendMessage(chatId, senderId, {
+        audioUrl: url,
+        replyTo: replyingTo || undefined,
+      });
+      onCancelReply?.();
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao enviar áudio");
+    } finally {
+      setBusy(false);
+    }
+  };
+
 
   const handleCameraCapture = async (file) => {
     setShowCamera(false);
@@ -342,6 +371,10 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
     closeAttachMenu();
     docFileRef.current?.click();
   };
+  const handlePickAudio = () => {
+    closeAttachMenu();
+    audioFileRef.current?.click();
+  };
   const handleOpenCamera = () => {
     closeAttachMenu();
     setShowCamera(true);
@@ -430,6 +463,7 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
                 onClose={closeAttachMenu}
                 onPickImage={handlePickImage}
                 onPickDoc={handlePickDoc}
+                onPickAudio={handlePickAudio}
                 onOpenCamera={handleOpenCamera}
               />
             )}
@@ -445,8 +479,15 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
           <input
             ref={docFileRef}
             type="file"
-            accept=".pdf,.doc,.docx,.xls,.xlsx,.xml,.txt,.csv,.zip,.rar,.7z,.json,.pptx,.ppt,.odt,.ods,.odp,.mp3,.ogg,.oga,.wav,.m4a,.aac,.flac,.opus,.weba,.webm,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,text/csv,text/xml,application/xml,application/json,application/zip,application/x-rar-compressed,application/octet-stream,audio/*"
+            accept=".pdf,.doc,.docx,.xls,.xlsx,.xml,.txt,.csv,.zip,.rar,.7z,.json,.pptx,.ppt,.odt,.ods,.odp,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,text/csv,text/xml,application/xml,application/json,application/zip,application/x-rar-compressed,application/octet-stream"
             onChange={handleDocFile}
+            className="hidden"
+          />
+          <input
+            ref={audioFileRef}
+            type="file"
+            accept="audio/*,.mp3,.ogg,.oga,.wav,.m4a,.aac,.flac,.opus,.weba,.webm"
+            onChange={handleAudioFile}
             className="hidden"
           />
 
@@ -538,7 +579,13 @@ function DropOverlay() {
   );
 }
 
-function AttachMenu({ onClose, onPickImage, onPickDoc, onOpenCamera }) {
+function AttachMenu({
+  onClose,
+  onPickImage,
+  onPickDoc,
+  onPickAudio,
+  onOpenCamera,
+}) {
   useEffect(() => {
     const handler = (e) => {
       if (e.key === "Escape") onClose();
@@ -569,6 +616,12 @@ function AttachMenu({ onClose, onPickImage, onPickDoc, onOpenCamera }) {
           icon={<ImageIcon />}
           label="Imagem"
           color="text-sky-400"
+        />
+        <MenuItem
+          onClick={onPickAudio}
+          icon={<AudioIcon />}
+          label="Áudio"
+          color="text-pink-400"
         />
         <MenuItem
           onClick={onPickDoc}
@@ -640,6 +693,16 @@ function CameraIcon() {
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
       <circle cx="12" cy="13" r="4" />
+    </svg>
+  );
+}
+
+function AudioIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 18V5l12-2v13" />
+      <circle cx="6" cy="18" r="3" />
+      <circle cx="18" cy="16" r="3" />
     </svg>
   );
 }
