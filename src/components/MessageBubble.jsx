@@ -477,6 +477,39 @@ function ReplyIcon() {
 function FileCard({ file }) {
   const downloadUrl = buildDownloadUrl(file.url);
 
+  // Se o arquivo é áudio (mensagens antigas que vieram pelo path de "file"
+  // antes da detecção automática), renderiza tocador inline ao invés do card.
+  if (isFileAudio(file)) {
+    return (
+      <div className="my-1 max-w-[300px] bg-black/25 rounded-lg p-2.5 flex flex-col gap-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <p
+            className="text-xs font-medium truncate flex-1 min-w-0"
+            title={file.name}
+          >
+            {file.name}
+          </p>
+          <a
+            href={downloadUrl}
+            target="_blank"
+            rel="noreferrer noopener"
+            download={file.name}
+            className="p-1 rounded-full hover:bg-white/15 transition opacity-80 hover:opacity-100 flex-shrink-0"
+            title="Baixar"
+            aria-label="Baixar áudio"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <DownloadIcon />
+          </a>
+        </div>
+        <audio controls src={file.url} className="w-full h-10" />
+        {file.size > 0 && (
+          <p className="text-[10px] opacity-60">{formatFileSize(file.size)}</p>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-center gap-3 bg-black/25 rounded-lg px-3 py-2 my-1 min-w-[240px] max-w-full">
       <FileBadge name={file.name} />
@@ -504,6 +537,28 @@ function FileCard({ file }) {
       </a>
     </div>
   );
+}
+
+const AUDIO_EXTENSIONS_SET = new Set([
+  "mp3",
+  "ogg",
+  "oga",
+  "wav",
+  "m4a",
+  "aac",
+  "flac",
+  "opus",
+  "weba",
+  "webm",
+]);
+
+function isFileAudio(file) {
+  if (!file) return false;
+  if (typeof file.type === "string" && file.type.startsWith("audio/"))
+    return true;
+  const name = file.name || "";
+  const ext = name.split(".").pop()?.toLowerCase();
+  return ext ? AUDIO_EXTENSIONS_SET.has(ext) : false;
 }
 
 function FileBadge({ name }) {
