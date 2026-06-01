@@ -66,6 +66,14 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
             imageUrl: url,
             replyTo: replyingTo || undefined,
           });
+        } else if (isAudioFile(file)) {
+          // .ogg, .mp3, .wav, .m4a, .opus, etc. — vira mensagem de áudio
+          // tocável inline, igual aos áudios gravados.
+          const url = await uploadChatAudio(chatId, file);
+          await sendMessage(chatId, senderId, {
+            audioUrl: url,
+            replyTo: replyingTo || undefined,
+          });
         } else {
           const url = await uploadChatFile(chatId, file);
           await sendMessage(chatId, senderId, {
@@ -217,6 +225,7 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
     if (!file) return;
     await uploadAndSendFile(file);
   };
+
 
   const handleCameraCapture = async (file) => {
     setShowCamera(false);
@@ -436,7 +445,7 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
           <input
             ref={docFileRef}
             type="file"
-            accept=".pdf,.doc,.docx,.xls,.xlsx,.xml,.txt,.csv,.zip,.rar,.7z,.json,.pptx,.ppt,.odt,.ods,.odp,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,text/csv,text/xml,application/xml,application/json,application/zip,application/x-rar-compressed,application/octet-stream"
+            accept=".pdf,.doc,.docx,.xls,.xlsx,.xml,.txt,.csv,.zip,.rar,.7z,.json,.pptx,.ppt,.odt,.ods,.odp,.mp3,.ogg,.oga,.wav,.m4a,.aac,.flac,.opus,.weba,.webm,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,text/csv,text/xml,application/xml,application/json,application/zip,application/x-rar-compressed,application/octet-stream,audio/*"
             onChange={handleDocFile}
             className="hidden"
           />
@@ -488,6 +497,28 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
       {dragOver && <DropOverlay />}
     </div>
   );
+}
+
+// Detecta áudio por MIME OU extensão (clipboard às vezes não traz MIME)
+const AUDIO_EXTENSIONS = [
+  "mp3",
+  "ogg",
+  "oga",
+  "wav",
+  "m4a",
+  "aac",
+  "flac",
+  "opus",
+  "weba",
+  "webm",
+];
+
+function isAudioFile(file) {
+  if (!file) return false;
+  if (file.type && file.type.startsWith("audio/")) return true;
+  const name = file.name || "";
+  const ext = name.split(".").pop()?.toLowerCase();
+  return ext && AUDIO_EXTENSIONS.includes(ext);
 }
 
 function DropOverlay() {

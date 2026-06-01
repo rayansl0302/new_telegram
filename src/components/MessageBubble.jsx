@@ -30,7 +30,9 @@ function MessageBubble({
   const colorClass = showSender ? colorFromName(senderName) : "";
 
   const readStatus = isOwn ? computeReadStatus(message, chat) : null;
-  const canSeeMessageInfo = isOwn && isGroup && !message.system;
+  // Dados da mensagem disponíveis pra qualquer mensagem própria (direct ou grupo)
+  // — em direct mostra a hora exata em que o outro leu/recebeu.
+  const canSeeMessageInfo = isOwn && !message.system && Boolean(chat);
 
   const reactions = message.reactions || {};
   const myReaction = currentUserId ? reactions[currentUserId] : null;
