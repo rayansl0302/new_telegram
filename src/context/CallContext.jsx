@@ -52,7 +52,9 @@ export function CallProvider({ children }) {
   // activeCall: { kind: "direct" | "group", session, type, peer/chat, role/_, status, error }
   const [activeCall, setActiveCall] = useState(null);
   const [ringTone, setRingTone] = useState(false);
+  const [dialTone, setDialTone] = useState(false);
   const ringIntervalRef = useRef(null);
+  const dialIntervalRef = useRef(null);
 
   const closeActiveCall = useCallback(() => {
     setActiveCall((curr) => {
@@ -284,11 +286,67 @@ export function CallProvider({ children }) {
   }, [activeCall, closeActiveCall]);
 
   // ─────────────────────────────────────────────────────────────
-  // Ringtone para chamadas 1-on-1 recebidas
+  // Ringtone para chamadas 1-on-1 recebidas (lado de quem RECEBE)
   // ─────────────────────────────────────────────────────────────
   useEffect(() => {
     setRingTone(Boolean(incoming) && !activeCall);
   }, [incoming, activeCall]);
+
+  // ─────────────────────────────────────────────────────────────
+  // Dial tone para chamadas 1-on-1 SAINDO (lado de quem LIGA)
+  // Toca enquanto espera o outro atender. Para no connect/ended/rejected.
+  // ─────────────────────────────────────────────────────────────
+  useEffect(() => {
+    const isOutgoingRinging =
+      activeCall?.kind === "direct" &&
+      activeCall?.role === "caller" &&
+      (activeCall?.status === "ringing" ||
+        activeCall?.status === "connecting") &&
+      !activeCall?.error;
+    setDialTone(Boolean(isOutgoingRinging));
+  }, [activeCall]);
+
+  useEffect(() => {
+    if (!dialTone) {
+      if (dialIntervalRef.current) {
+        clearInterval(dialIntervalRef.current);
+        dialIntervalRef.current = null;
+      }
+      return;
+    }
+    const playDialBeep = () => {
+      try {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) return;
+        const ctx = new Ctx();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        // Tom de discagem mais grave que o ringtone (440Hz contínuo curto)
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(440, ctx.currentTime);
+        gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + 0.05);
+        gain.gain.linearRampToValueAtTime(0.12, ctx.currentTime + 0.45);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.5);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.55);
+        setTimeout(() => ctx.close().catch(() => {}), 700);
+      } catch (e) {
+        // ignora
+      }
+    };
+    playDialBeep();
+    // Padrão tipo telefone: beep ~0.5s, silêncio ~1.5s, repete
+    dialIntervalRef.current = setInterval(playDialBeep, 2000);
+    return () => {
+      if (dialIntervalRef.current) {
+        clearInterval(dialIntervalRef.current);
+        dialIntervalRef.current = null;
+      }
+    };
+  }, [dialTone]);
 
   useEffect(() => {
     if (!ringTone) {
