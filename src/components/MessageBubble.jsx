@@ -20,8 +20,17 @@ function MessageBubble({
   isCurrentMatch,
 }) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxStartIndex, setLightboxStartIndex] = useState(0);
   const [infoOpen, setInfoOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+
+  // Unifica imagens: array novo `images` + retrocompat com `imageUrl` único
+  const imageUrls =
+    Array.isArray(message.images) && message.images.length > 0
+      ? message.images
+      : message.imageUrl
+      ? [message.imageUrl]
+      : [];
 
   const time = formatMessageTime(message.createdAt);
   const showSender = isGroup && !isOwn && senderInfo;
@@ -238,9 +247,10 @@ function MessageBubble({
         </>
       )}
 
-      {lightboxOpen && message.imageUrl && (
+      {lightboxOpen && imageUrls.length > 0 && (
         <MediaLightbox
-          src={message.imageUrl}
+          images={imageUrls}
+          initialIndex={lightboxStartIndex}
           onClose={() => setLightboxOpen(false)}
         />
       )}
@@ -469,6 +479,111 @@ function ReplyIcon() {
       <polyline points="9 17 4 12 9 7" />
       <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
     </svg>
+  );
+}
+
+// --- Galeria de imagens (1 ou várias) ---
+
+function ImageGallery({ urls, onOpenAt }) {
+  const count = urls.length;
+
+  if (count === 1) {
+    return (
+      <button
+        type="button"
+        onClick={() => onOpenAt(0)}
+        className="block w-full"
+        aria-label="Ampliar imagem"
+      >
+        <img
+          src={urls[0]}
+          alt="imagem"
+          className="rounded-lg mb-1 max-w-full max-h-80 object-contain hover:opacity-90 transition"
+        />
+      </button>
+    );
+  }
+
+  // 2 imagens lado a lado
+  if (count === 2) {
+    return (
+      <div className="grid grid-cols-2 gap-1 rounded-lg overflow-hidden mb-1 max-w-[320px]">
+        {urls.map((url, i) => (
+          <GalleryTile key={i} url={url} onClick={() => onOpenAt(i)} />
+        ))}
+      </div>
+    );
+  }
+
+  // 3 imagens: 1 grande à esquerda, 2 pequenas empilhadas à direita
+  if (count === 3) {
+    return (
+      <div className="grid grid-cols-2 grid-rows-2 gap-1 rounded-lg overflow-hidden mb-1 max-w-[320px] aspect-square">
+        <button
+          type="button"
+          onClick={() => onOpenAt(0)}
+          className="row-span-2 overflow-hidden hover:opacity-90 transition"
+          aria-label="Ampliar imagem 1"
+        >
+          <img
+            src={urls[0]}
+            alt="imagem 1"
+            className="w-full h-full object-cover"
+          />
+        </button>
+        <GalleryTile url={urls[1]} onClick={() => onOpenAt(1)} />
+        <GalleryTile url={urls[2]} onClick={() => onOpenAt(2)} />
+      </div>
+    );
+  }
+
+  // 4 imagens: 2x2
+  if (count === 4) {
+    return (
+      <div className="grid grid-cols-2 gap-1 rounded-lg overflow-hidden mb-1 max-w-[320px]">
+        {urls.map((url, i) => (
+          <GalleryTile key={i} url={url} onClick={() => onOpenAt(i)} />
+        ))}
+      </div>
+    );
+  }
+
+  // 5+ imagens: 2x2 com overlay "+N" no 4º tile
+  const extra = count - 4;
+  return (
+    <div className="grid grid-cols-2 gap-1 rounded-lg overflow-hidden mb-1 max-w-[320px]">
+      <GalleryTile url={urls[0]} onClick={() => onOpenAt(0)} />
+      <GalleryTile url={urls[1]} onClick={() => onOpenAt(1)} />
+      <GalleryTile url={urls[2]} onClick={() => onOpenAt(2)} />
+      <button
+        type="button"
+        onClick={() => onOpenAt(3)}
+        className="relative aspect-square overflow-hidden hover:opacity-90 transition"
+        aria-label={`Abrir imagem 4 (mais ${extra})`}
+      >
+        <img
+          src={urls[3]}
+          alt={`imagem 4 (mais ${extra})`}
+          className="w-full h-full object-cover"
+        />
+        <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white text-2xl font-bold">
+          +{extra}
+        </div>
+      </button>
+    </div>
+  );
+}
+
+function GalleryTile({ url, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="aspect-square overflow-hidden hover:opacity-90 transition"
+      aria-label="Ampliar imagem"
+    >
+      <img src={url} alt="" className="w-full h-full object-cover" />
+    </button>
   );
 }
 

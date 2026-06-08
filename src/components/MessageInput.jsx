@@ -48,54 +48,90 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
 
   // ─────────────────────────────────────────────────────────────
   // Upload genérico (usado por paste, drop, e botões)
+  // Aceita 1 ou N arquivos. Se houver várias imagens, vira UMA mensagem
+  // com array `images`. Não-imagens são enviadas individualmente.
   // ─────────────────────────────────────────────────────────────
-  const uploadAndSendFile = useCallback(
-    async (file) => {
+  const uploadAndSendFiles = useCallback(
+    async (filesInput) => {
+      const files = Array.isArray(filesInput) ? filesInput : [filesInput];
       const { chatId, senderId, replyingTo, busy } = stateRef.current;
-      if (!file || !chatId || busy) return;
+      if (files.length === 0 || !chatId || busy) return;
 
-      if (file.size > MAX_FILE_SIZE) {
-        alert("Arquivo muito grande (máximo 10 MB)");
-        return;
+      // Valida tamanho de todos antes
+      for (const f of files) {
+        if (!f) continue;
+        if (f.size > MAX_FILE_SIZE) {
+          alert(
+            `Arquivo "${f.name || "arquivo"}" muito grande (máximo 10 MB)`
+          );
+          return;
+        }
       }
+
+      const images = files.filter((f) => f?.type?.startsWith("image/"));
+      const audios = files.filter((f) => f && !f.type?.startsWith("image/") && isAudioFile(f));
+      const others = files.filter(
+        (f) => f && !f.type?.startsWith("image/") && !isAudioFile(f)
+      );
 
       setBusy(true);
       try {
-        if (file.type.startsWith("image/")) {
-          const url = await uploadChatImage(chatId, file);
-          await sendMessage(chatId, senderId, {
-            imageUrl: url,
-            replyTo: replyingTo || undefined,
-          });
-        } else if (isAudioFile(file)) {
-          // .ogg, .mp3, .wav, .m4a, .opus, etc. — vira mensagem de áudio
-          // tocável inline, igual aos áudios gravados.
-          const url = await uploadChatAudio(chatId, file);
+        // 1) Imagens — agrupa em UMA mensagem com array `images`
+        if (images.length > 0) {
+          const urls = await Promise.all(
+            images.map((f) => uploadChatImage(chatId, f))
+          );
+          if (urls.length === 1) {
+            await sendMessage(chatId, senderId, {
+              imageUrl: urls[0],
+              replyTo: replyingTo || undefined,
+            });
+          } else {
+            await sendMessage(chatId, senderId, {
+              images: urls,
+              replyTo: replyingTo || undefined,
+            });
+          }
+        }
+
+        // 2) Áudios — uma mensagem por arquivo
+        for (const f of audios) {
+          const url = await uploadChatAudio(chatId, f);
           await sendMessage(chatId, senderId, {
             audioUrl: url,
             replyTo: replyingTo || undefined,
           });
-        } else {
-          const url = await uploadChatFile(chatId, file);
+        }
+
+        // 3) Outros arquivos — uma mensagem por arquivo
+        for (const f of others) {
+          const url = await uploadChatFile(chatId, f);
           await sendMessage(chatId, senderId, {
             file: {
               url,
-              name: file.name || `arquivo-${Date.now()}`,
-              size: file.size,
-              type: file.type || "application/octet-stream",
+              name: f.name || `arquivo-${Date.now()}`,
+              size: f.size,
+              type: f.type || "application/octet-stream",
             },
             replyTo: replyingTo || undefined,
           });
         }
+
         onCancelReply?.();
       } catch (err) {
         console.error(err);
-        alert("Erro ao enviar arquivo");
+        alert("Erro ao enviar arquivos");
       } finally {
         setBusy(false);
       }
     },
     [onCancelReply]
+  );
+
+  // Atalho retrocompatível
+  const uploadAndSendFile = useCallback(
+    (file) => uploadAndSendFiles([file]),
+    [uploadAndSendFiles]
   );
 
   // ─────────────────────────────────────────────────────────────
@@ -108,16 +144,17 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
       const items = e.clipboardData?.items;
       if (!items || items.length === 0) return;
 
-      // Procura primeiro item que é um arquivo (imagem da clipboard, etc.)
+      // Coleta TODOS os arquivos da clipboard (suporta múltiplos)
+      const files = [];
       for (const item of items) {
         if (item.kind === "file") {
           const file = item.getAsFile();
-          if (file) {
-            e.preventDefault();
-            uploadAndSendFile(file);
-            return;
-          }
+          if (file) files.push(file);
         }
+      }
+      if (files.length > 0) {
+        e.preventDefault();
+        uploadAndSendFiles(files);
       }
       // Se não tem arquivo, deixa o paste normal de texto rolar
     };
@@ -170,8 +207,7 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
 
       const files = Array.from(e.dataTransfer?.files || []);
       if (files.length === 0) return;
-      // Por simplicidade, envia só o primeiro
-      uploadAndSendFile(files[0]);
+      uploadAndSendFiles(files);
     };
 
     document.addEventListener("dragenter", onDragEnter);
@@ -185,7 +221,7 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
       document.removeEventListener("dragleave", onDragLeave);
       document.removeEventListener("drop", onDrop);
     };
-  }, [uploadAndSendFile]);
+  }, [uploadAndSendFiles]);
 
   // ─────────────────────────────────────────────────────────────
   // Envio de texto (otimista, fire-and-forget)
@@ -210,14 +246,15 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
   };
 
   const handleImage = async (e) => {
-    const file = e.target.files?.[0];
+    const files = Array.from(e.target.files || []);
     e.target.value = "";
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
+    if (files.length === 0) return;
+    const onlyImages = files.filter((f) => f.type.startsWith("image/"));
+    if (onlyImages.length === 0) {
       alert("Apenas imagens são suportadas neste botão");
       return;
     }
-    await uploadAndSendFile(file);
+    await uploadAndSendFiles(onlyImages);
   };
 
   const handleDocFile = async (e) => {
@@ -473,6 +510,7 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
             ref={imageFileRef}
             type="file"
             accept="image/*"
+            multiple
             onChange={handleImage}
             className="hidden"
           />

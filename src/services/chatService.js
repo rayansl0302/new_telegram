@@ -266,12 +266,15 @@ export const demoteFromAdmin = async (chatId, uid) => {
 export const sendMessage = async (
   chatId,
   senderId,
-  { text, imageUrl, audioUrl, file, replyTo } = {}
+  { text, imageUrl, images, audioUrl, file, replyTo } = {}
 ) => {
+  const normalizedImages =
+    Array.isArray(images) && images.length > 0 ? images : null;
   const messageData = {
     senderId,
     text: text || "",
     imageUrl: imageUrl || null,
+    images: normalizedImages,
     audioUrl: audioUrl || null,
     file: file || null,
     createdAt: serverTimestamp(),
@@ -286,9 +289,12 @@ export const sendMessage = async (
     };
   }
 
+  const imageCount =
+    (normalizedImages?.length || 0) + (imageUrl ? 1 : 0);
   const previewText =
     text ||
-    (imageUrl ? "[Imagem]" : "") ||
+    (imageCount > 1 ? `[${imageCount} imagens]` : "") ||
+    (imageCount === 1 ? "[Imagem]" : "") ||
     (audioUrl ? "[Áudio]" : "") ||
     (file ? `[Arquivo: ${file.name || "documento"}]` : "");
 
