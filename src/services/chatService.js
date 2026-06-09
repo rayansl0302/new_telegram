@@ -326,6 +326,32 @@ export const markChatAsRead = async (chatId, uid) => {
   });
 };
 
+// ─── Typing indicator ──────────────────────────────────────────
+// Escreve typing.{uid} no doc do chat para que outros participantes
+// vejam via onSnapshot. Não atualiza chat.updatedAt para evitar que
+// digitar bote a conversa pro topo da lista.
+export const setTypingState = async (chatId, uid, state) => {
+  if (!chatId || !uid) return;
+  const chatRef = doc(db, "chats", chatId);
+  try {
+    if (state === null) {
+      await updateDoc(chatRef, {
+        [`typing.${uid}`]: deleteField(),
+      });
+    } else {
+      // state esperado: "typing" | "recording"
+      await updateDoc(chatRef, {
+        [`typing.${uid}`]: {
+          state,
+          updatedAt: serverTimestamp(),
+        },
+      });
+    }
+  } catch (err) {
+    console.warn("setTypingState falhou:", err?.code || err);
+  }
+};
+
 // --- Reações ---
 
 export const setMessageReaction = async (chatId, messageId, uid, emoji) => {

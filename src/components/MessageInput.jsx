@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { sendMessage } from "../services/chatService";
+import { sendMessage, setTypingState } from "../services/chatService";
 import {
   uploadChatImage,
   uploadChatAudio,
@@ -23,6 +23,12 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
   const docFileRef = useRef(null);
   const audioFileRef = useRef(null);
   const textRef = useRef(null);
+
+  // Typing indicator
+  const typingTimerRef = useRef(null);
+  const lastTypingSentRef = useRef(0);
+  const TYPING_TIMEOUT_MS = 5000;
+  const TYPING_REFRESH_MS = 3000;
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const audioStreamRef = useRef(null);
@@ -45,6 +51,50 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
       audioStreamRef.current?.getTracks().forEach((t) => t.stop());
     };
   }, []);
+
+  // ─── Typing indicator helpers ───────────────────────────────────
+  const clearTypingState = useCallback(() => {
+    if (typingTimerRef.current) {
+      clearTimeout(typingTimerRef.current);
+      typingTimerRef.current = null;
+    }
+    lastTypingSentRef.current = 0;
+    if (chatId && senderId) {
+      setTypingState(chatId, senderId, null).catch(() => {});
+    }
+  }, [chatId, senderId]);
+
+  const notifyTyping = useCallback(
+    (state) => {
+      if (!chatId || !senderId) return;
+      const now = Date.now();
+      // Só re-envia se já passou tempo suficiente desde a última escrita
+      if (
+        state === "recording" ||
+        now - lastTypingSentRef.current > TYPING_REFRESH_MS
+      ) {
+        setTypingState(chatId, senderId, state).catch(() => {});
+        lastTypingSentRef.current = now;
+      }
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+      // "recording" não tem timeout automático — só sai por stop/cancel
+      if (state === "typing") {
+        typingTimerRef.current = setTimeout(() => {
+          setTypingState(chatId, senderId, null).catch(() => {});
+          lastTypingSentRef.current = 0;
+          typingTimerRef.current = null;
+        }, TYPING_TIMEOUT_MS);
+      }
+    },
+    [chatId, senderId]
+  );
+
+  // Limpa typing quando troca de chat, desmonta, ou usuário muda
+  useEffect(() => {
+    return () => {
+      clearTypingState();
+    };
+  }, [chatId, senderId, clearTypingState]);
 
   // ─────────────────────────────────────────────────────────────
   // Upload genérico (usado por paste, drop, e botões)
@@ -234,6 +284,7 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
     const replySnap = replyingTo;
     setText("");
     onCancelReply?.();
+    clearTypingState();
 
     sendMessage(chatId, senderId, {
       text: trimmed,
@@ -374,6 +425,8 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
       recordTimerRef.current = setInterval(() => {
         setRecordSeconds((s) => s + 1);
       }, 1000);
+      // Notifica que está gravando áudio
+      notifyTyping("recording");
     } catch (err) {
       console.error(err);
       alert(
@@ -385,11 +438,13 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
   const stopAndSend = () => {
     cancelRecordingFlagRef.current = false;
     mediaRecorderRef.current?.stop();
+    clearTypingState();
   };
 
   const cancelRecording = () => {
     cancelRecordingFlagRef.current = true;
     mediaRecorderRef.current?.stop();
+    clearTypingState();
   };
 
   const formatRecordTime = (s) => {
@@ -538,7 +593,15 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
                 : "Digite, cole imagem ou arraste arquivo..."
             }
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => {
+              const next = e.target.value;
+              setText(next);
+              if (next.trim()) {
+                notifyTyping("typing");
+              } else {
+                clearTypingState();
+              }
+            }}
             className="flex-1 min-w-0 px-3 md:px-4 py-2 bg-slate-800 border border-slate-700 rounded-full text-white placeholder-slate-500 focus:outline-none focus:border-sky-500"
           />
 

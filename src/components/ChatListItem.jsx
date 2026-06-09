@@ -1,4 +1,5 @@
 import Avatar from "./Avatar";
+import { getTypingLabel } from "../utils/typingStatus";
 
 function ChatListItem({ chat, currentUserId, isSelected, isUnread, onClick }) {
   const isGroup = chat.type === "group";
@@ -8,6 +9,7 @@ function ChatListItem({ chat, currentUserId, isSelected, isUnread, onClick }) {
     isGroup
   );
   const time = formatTime(chat.lastMessage?.createdAt);
+  const typingLabel = getTypingLabel(chat, currentUserId, isGroup);
 
   return (
     <button
@@ -36,14 +38,20 @@ function ChatListItem({ chat, currentUserId, isSelected, isUnread, onClick }) {
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <p
-            className={`text-sm truncate flex-1 ${
-              isUnread ? "text-white font-medium" : "text-slate-400"
-            } ${lastMessageItalic ? "italic" : ""}`}
-          >
-            {lastMessageText}
-          </p>
-          {isUnread && (
+          {typingLabel ? (
+            <p className="text-sm truncate flex-1 text-emerald-400 italic">
+              {typingLabel}
+            </p>
+          ) : (
+            <p
+              className={`text-sm truncate flex-1 ${
+                isUnread ? "text-white font-medium" : "text-slate-400"
+              } ${lastMessageItalic ? "italic" : ""}`}
+            >
+              {lastMessageText}
+            </p>
+          )}
+          {isUnread && !typingLabel && (
             <span className="w-2.5 h-2.5 rounded-full bg-sky-500 flex-shrink-0" />
           )}
         </div>

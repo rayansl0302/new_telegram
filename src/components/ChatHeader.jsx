@@ -1,5 +1,6 @@
 import { useCall } from "../context/CallContext";
 import { useGroupCallStatus } from "../hooks/useGroupCallStatus";
+import { getTypingLabel } from "../utils/typingStatus";
 import Avatar from "./Avatar";
 
 function ChatHeader({
@@ -27,6 +28,8 @@ function ChatHeader({
     photoURL = otherInfo.photoURL;
     subtitle = otherInfo.email;
   }
+
+  const typingLabel = getTypingLabel(chat, currentUserId, isGroup);
 
   const handleDirectCall = (type) => {
     if (isGroup || !otherId) return;
@@ -89,7 +92,15 @@ function ChatHeader({
           <Avatar src={photoURL} name={name} size={40} />
           <div className="min-w-0 flex-1">
             <p className="font-semibold truncate">{name}</p>
-            <p className="text-xs text-slate-500 truncate">{subtitle}</p>
+            <p
+              className={`text-xs truncate ${
+                typingLabel
+                  ? "text-emerald-400 italic"
+                  : "text-slate-500"
+              }`}
+            >
+              {typingLabel || subtitle}
+            </p>
           </div>
         </button>
 
