@@ -4,6 +4,12 @@ import { useAuth } from "../context/AuthContext";
 import { updateUserProfile } from "../services/userService";
 import { uploadAvatar } from "../services/storageService";
 import Avatar from "../components/Avatar";
+import {
+  subscribeInstallPrompt,
+  promptInstall,
+  isStandalone,
+  detectPlatform,
+} from "../utils/pwaInstall";
 
 function ProfilePage() {
   const { user, logout, refreshUser } = useAuth();
@@ -23,6 +29,39 @@ function ProfilePage() {
     return Notification.permission;
   });
   const [notifBusy, setNotifBusy] = useState(false);
+
+  // PWA install
+  const [hasInstallPrompt, setHasInstallPrompt] = useState(false);
+  const [installed, setInstalled] = useState(() => isStandalone());
+  const [installing, setInstalling] = useState(false);
+  const platform = detectPlatform();
+  const apkUrl = import.meta.env.VITE_APK_URL || "";
+
+  useEffect(() => {
+    const unsub = subscribeInstallPrompt((evt) => {
+      setHasInstallPrompt(Boolean(evt));
+    });
+    // Reage se for instalado em outra aba
+    const onChange = () => setInstalled(isStandalone());
+    const mq = window.matchMedia?.("(display-mode: standalone)");
+    mq?.addEventListener?.("change", onChange);
+    return () => {
+      unsub();
+      mq?.removeEventListener?.("change", onChange);
+    };
+  }, []);
+
+  const handleInstallPWA = async () => {
+    setInstalling(true);
+    try {
+      const outcome = await promptInstall();
+      if (outcome === "accepted") {
+        setInstalled(true);
+      }
+    } finally {
+      setInstalling(false);
+    }
+  };
 
   // Atualiza estado se permissão mudar enquanto a página está aberta (raro)
   useEffect(() => {
@@ -208,6 +247,98 @@ function ProfilePage() {
 
         <section className="mt-8 pt-6 border-t border-slate-800">
           <div className="flex items-center gap-2 mb-3">
+            <DownloadAppIcon className="text-slate-400" />
+            <h3 className="text-sm font-medium text-slate-300">
+              Instalar como app
+            </h3>
+          </div>
+
+          {installed ? (
+            <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3 flex items-center gap-2 mb-3">
+              <CheckIcon className="text-green-400" />
+              <p className="text-sm text-green-400">
+                App instalado neste dispositivo
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3 mb-3">
+              {/* PWA — sempre disponível como opção. Botão só ativa
+                  quando o browser disparou beforeinstallprompt. */}
+              <div className="bg-slate-800/40 border border-slate-700 rounded-lg p-3">
+                <div className="flex items-start gap-3">
+                  <PwaIcon className="text-sky-400 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-slate-100">
+                      PWA (recomendado)
+                    </p>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Funciona em qualquer sistema. Atualiza automaticamente
+                      quando há nova versão. Não ocupa espaço extra.
+                    </p>
+                  </div>
+                </div>
+
+                {hasInstallPrompt ? (
+                  <button
+                    type="button"
+                    onClick={handleInstallPWA}
+                    disabled={installing}
+                    className="mt-3 w-full py-2.5 bg-sky-500 hover:bg-sky-600 disabled:opacity-50 text-white font-semibold rounded-lg transition"
+                  >
+                    {installing ? "Instalando..." : "Instalar PWA"}
+                  </button>
+                ) : platform === "ios" ? (
+                  <p className="mt-3 text-xs text-slate-400 leading-relaxed">
+                    No iOS, toque no botão <strong>compartilhar</strong> do
+                    Safari e selecione <strong>"Adicionar à Tela de
+                    Início"</strong>.
+                  </p>
+                ) : (
+                  <p className="mt-3 text-xs text-slate-500 italic">
+                    O navegador ainda não ofereceu instalação. Recarregue a
+                    página e tente novamente em alguns instantes.
+                  </p>
+                )}
+              </div>
+
+              {/* APK — só Android, e só se a URL foi configurada */}
+              {platform === "android" && apkUrl && (
+                <div className="bg-slate-800/40 border border-slate-700 rounded-lg p-3">
+                  <div className="flex items-start gap-3">
+                    <AndroidIcon className="text-emerald-400 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-100">
+                        APK Android
+                      </p>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Aplicativo nativo. Para instalar fora da Play Store
+                        você precisa permitir "Fontes desconhecidas" nas
+                        configurações de segurança.
+                      </p>
+                    </div>
+                  </div>
+                  <a
+                    href={apkUrl}
+                    download
+                    rel="noreferrer noopener"
+                    className="mt-3 w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold rounded-lg transition flex items-center justify-center gap-2"
+                  >
+                    <DownloadAppIcon /> Baixar APK
+                  </a>
+                </div>
+              )}
+
+              {platform === "android" && !apkUrl && (
+                <p className="text-xs text-slate-500 italic">
+                  Versão APK Android será disponibilizada em breve.
+                </p>
+              )}
+            </div>
+          )}
+        </section>
+
+        <section className="mt-8 pt-6 border-t border-slate-800">
+          <div className="flex items-center gap-2 mb-3">
             <BellIcon className="text-slate-400" />
             <h3 className="text-sm font-medium text-slate-300">
               Notificações
@@ -286,6 +417,67 @@ function CameraIcon() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
       <circle cx="12" cy="13" r="4" />
+    </svg>
+  );
+}
+
+function DownloadAppIcon({ className }) {
+  return (
+    <svg
+      className={className}
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
+    </svg>
+  );
+}
+
+function PwaIcon({ className }) {
+  return (
+    <svg
+      className={className}
+      width="22"
+      height="22"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="3" y="2" width="14" height="20" rx="2" ry="2" />
+      <line x1="10" y1="18" x2="10" y2="18" />
+      <path d="M14 8h6M17 5v6" />
+    </svg>
+  );
+}
+
+function AndroidIcon({ className }) {
+  return (
+    <svg
+      className={className}
+      width="22"
+      height="22"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M5 10h14a1 1 0 0 1 1 1v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-6a1 1 0 0 1 1-1z" />
+      <path d="M7 10V7a5 5 0 0 1 10 0v3" />
+      <line x1="8" y1="14" x2="8" y2="17" />
+      <line x1="16" y1="14" x2="16" y2="17" />
     </svg>
   );
 }
