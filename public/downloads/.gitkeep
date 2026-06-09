@@ -1,0 +1,4 @@
+# Pasta de downloads estáticos servidos pelo Vercel.
+#
+# O APK Android (app.apk) é gerado por `npm run build:apk` e copiado aqui.
+# Veja RULES.md e docs/ANDROID.md.

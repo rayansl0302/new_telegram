@@ -35,7 +35,10 @@ function ProfilePage() {
   const [installed, setInstalled] = useState(() => isStandalone());
   const [installing, setInstalling] = useState(false);
   const platform = detectPlatform();
-  const apkUrl = import.meta.env.VITE_APK_URL || "";
+  // APK gerado localmente via `npm run build:apk` e servido estaticamente
+  // pelo Vercel a partir de public/downloads/app.apk.
+  const APK_PATH = "/downloads/app.apk";
+  const [apkAvailable, setApkAvailable] = useState(false);
 
   useEffect(() => {
     const unsub = subscribeInstallPrompt((evt) => {
@@ -50,6 +53,33 @@ function ProfilePage() {
       mq?.removeEventListener?.("change", onChange);
     };
   }, []);
+
+  // Detecta se o APK foi gerado e está disponível
+  useEffect(() => {
+    if (platform !== "android") {
+      setApkAvailable(false);
+      return;
+    }
+    let cancelled = false;
+    fetch(APK_PATH, { method: "HEAD" })
+      .then((res) => {
+        if (cancelled) return;
+        // Vercel responde 200 quando o arquivo existe. Em dev, vite serve
+        // estáticos com 200 também. Se 404, o APK ainda não foi gerado.
+        const contentType = res.headers.get("content-type") || "";
+        const isApk =
+          res.ok &&
+          (contentType.includes("octet-stream") ||
+            contentType.includes("vnd.android"));
+        setApkAvailable(isApk || (res.ok && !contentType.includes("text/html")));
+      })
+      .catch(() => {
+        if (!cancelled) setApkAvailable(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [platform]);
 
   const handleInstallPWA = async () => {
     setInstalling(true);
@@ -301,8 +331,9 @@ function ProfilePage() {
                 )}
               </div>
 
-              {/* APK — só Android, e só se a URL foi configurada */}
-              {platform === "android" && apkUrl && (
+              {/* APK Android — servido estaticamente a partir de
+                  public/downloads/app.apk. Só aparece se o arquivo existe. */}
+              {platform === "android" && apkAvailable && (
                 <div className="bg-slate-800/40 border border-slate-700 rounded-lg p-3">
                   <div className="flex items-start gap-3">
                     <AndroidIcon className="text-emerald-400 flex-shrink-0 mt-0.5" />
@@ -311,15 +342,15 @@ function ProfilePage() {
                         APK Android
                       </p>
                       <p className="text-xs text-slate-400 mt-0.5">
-                        Aplicativo nativo. Para instalar fora da Play Store
-                        você precisa permitir "Fontes desconhecidas" nas
-                        configurações de segurança.
+                        Aplicativo nativo com o mesmo conteúdo da PWA. Para
+                        instalar fora da Play Store, permita "Fontes
+                        desconhecidas" nas configurações de segurança.
                       </p>
                     </div>
                   </div>
                   <a
-                    href={apkUrl}
-                    download
+                    href={APK_PATH}
+                    download="telegram-clone.apk"
                     rel="noreferrer noopener"
                     className="mt-3 w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold rounded-lg transition flex items-center justify-center gap-2"
                   >
@@ -328,7 +359,7 @@ function ProfilePage() {
                 </div>
               )}
 
-              {platform === "android" && !apkUrl && (
+              {platform === "android" && !apkAvailable && (
                 <p className="text-xs text-slate-500 italic">
                   Versão APK Android será disponibilizada em breve.
                 </p>

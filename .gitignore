@@ -26,3 +26,20 @@ dist-ssr
 .env
 .env.local
 .env.*.local
+
+# Android / Bubblewrap (TWA build) — keystore e outputs locais.
+# O APK final é copiado pra public/downloads/app.apk (esse SIM vai pro git
+# pra ser servido pelo Vercel).
+android/.gradle/
+android/build/
+android/app/build/
+android/app/release/
+android/local.properties
+android/gradlew
+android/gradlew.bat
+android/gradle/
+android/.idea/
+android/*.apk
+android/*.aab
+*.keystore
+*.jks
