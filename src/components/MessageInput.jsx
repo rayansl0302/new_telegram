@@ -4,15 +4,17 @@ import { sendMessage, setTypingState } from "../services/chatService";
 import {
   uploadChatImage,
   uploadChatAudio,
+  uploadChatVideo,
   uploadChatFile,
 } from "../services/storageService";
 import CameraCapture from "./CameraCapture";
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB — pra video ter espaço
 
 function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState(null);
   const [recording, setRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [showCamera, setShowCamera] = useState(false);
@@ -112,22 +114,56 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
         if (!f) continue;
         if (f.size > MAX_FILE_SIZE) {
           alert(
-            `Arquivo "${f.name || "arquivo"}" muito grande (máximo 10 MB)`
+            `Arquivo "${f.name || "arquivo"}" muito grande (máximo ${
+              MAX_FILE_SIZE / 1024 / 1024
+            } MB)`
           );
           return;
         }
       }
 
       const images = files.filter((f) => f?.type?.startsWith("image/"));
-      const audios = files.filter((f) => f && !f.type?.startsWith("image/") && isAudioFile(f));
+      const videos = files.filter((f) => f?.type?.startsWith("video/"));
+      const audios = files.filter(
+        (f) =>
+          f &&
+          !f.type?.startsWith("image/") &&
+          !f.type?.startsWith("video/") &&
+          isAudioFile(f)
+      );
       const others = files.filter(
-        (f) => f && !f.type?.startsWith("image/") && !isAudioFile(f)
+        (f) =>
+          f &&
+          !f.type?.startsWith("image/") &&
+          !f.type?.startsWith("video/") &&
+          !isAudioFile(f)
       );
 
+      const totalUploads =
+        (images.length > 0 ? 1 : 0) + // imagens viram uma única mensagem
+        videos.length +
+        audios.length +
+        others.length;
+      let doneUploads = 0;
+
+      const updateStatus = (label) => {
+        setUploadStatus({
+          label,
+          current: doneUploads + 1,
+          total: totalUploads,
+        });
+      };
+
       setBusy(true);
+      setUploadStatus({ label: "Preparando upload...", current: 0, total: totalUploads });
       try {
         // 1) Imagens — agrupa em UMA mensagem com array `images`
         if (images.length > 0) {
+          updateStatus(
+            images.length === 1
+              ? `Enviando imagem...`
+              : `Enviando ${images.length} imagens...`
+          );
           const urls = await Promise.all(
             images.map((f) => uploadChatImage(chatId, f))
           );
@@ -142,19 +178,35 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
               replyTo: replyingTo || undefined,
             });
           }
+          doneUploads++;
         }
 
-        // 2) Áudios — uma mensagem por arquivo
+        // 2) Vídeos — uma mensagem por arquivo
+        for (const f of videos) {
+          updateStatus(`Enviando vídeo (${f.name || "vídeo"})...`);
+          const url = await uploadChatVideo(chatId, f);
+          await sendMessage(chatId, senderId, {
+            videoUrl: url,
+            videoName: f.name || `video-${Date.now()}`,
+            replyTo: replyingTo || undefined,
+          });
+          doneUploads++;
+        }
+
+        // 3) Áudios — uma mensagem por arquivo
         for (const f of audios) {
+          updateStatus(`Enviando áudio...`);
           const url = await uploadChatAudio(chatId, f);
           await sendMessage(chatId, senderId, {
             audioUrl: url,
             replyTo: replyingTo || undefined,
           });
+          doneUploads++;
         }
 
-        // 3) Outros arquivos — uma mensagem por arquivo
+        // 4) Outros arquivos — uma mensagem por arquivo
         for (const f of others) {
+          updateStatus(`Enviando ${f.name || "arquivo"}...`);
           const url = await uploadChatFile(chatId, f);
           await sendMessage(chatId, senderId, {
             file: {
@@ -165,14 +217,18 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
             },
             replyTo: replyingTo || undefined,
           });
+          doneUploads++;
         }
 
         onCancelReply?.();
       } catch (err) {
         console.error(err);
-        alert("Erro ao enviar arquivos");
+        alert(
+          `Erro ao enviar arquivos: ${err?.message || "veja o console"}`
+        );
       } finally {
         setBusy(false);
+        setUploadStatus(null);
       }
     },
     [onCancelReply]
@@ -300,12 +356,15 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
     const files = Array.from(e.target.files || []);
     e.target.value = "";
     if (files.length === 0) return;
-    const onlyImages = files.filter((f) => f.type.startsWith("image/"));
-    if (onlyImages.length === 0) {
-      alert("Apenas imagens são suportadas neste botão");
+    // O input aceita imagens e vídeos; o filtro abaixo segue isso
+    const visualMedia = files.filter(
+      (f) => f.type.startsWith("image/") || f.type.startsWith("video/")
+    );
+    if (visualMedia.length === 0) {
+      alert("Apenas imagens ou vídeos são suportados neste botão");
       return;
     }
-    await uploadAndSendFiles(onlyImages);
+    await uploadAndSendFiles(visualMedia);
   };
 
   const handleDocFile = async (e) => {
@@ -474,6 +533,22 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
 
   return (
     <div className="border-t border-slate-800 bg-slate-950/95 backdrop-blur shrink-0">
+      {uploadStatus && (
+        <div className="px-3 pt-2">
+          <div className="flex items-center gap-2 bg-sky-500/10 border border-sky-500/30 rounded px-3 py-2">
+            <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse flex-shrink-0" />
+            <p className="text-sm text-sky-200 flex-1 truncate">
+              {uploadStatus.label}
+            </p>
+            {uploadStatus.total > 1 && (
+              <span className="text-xs text-sky-300 tabular-nums flex-shrink-0">
+                {Math.min(uploadStatus.current, uploadStatus.total)}/
+                {uploadStatus.total}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
       {replyingTo && (
         <div className="px-3 pt-2">
           <div className="flex items-stretch gap-2 bg-slate-800/60 border-l-4 border-sky-500 rounded px-3 py-2">
@@ -564,7 +639,7 @@ function MessageInput({ chatId, senderId, replyingTo, onCancelReply }) {
           <input
             ref={imageFileRef}
             type="file"
-            accept="image/*"
+            accept="image/*,video/*"
             multiple
             onChange={handleImage}
             className="hidden"

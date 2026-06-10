@@ -38,6 +38,10 @@ export const uploadGroupPhoto = (file) =>
 export const uploadChatAudio = (chatId, file) =>
   uploadToCloudinary(file, `audio/${chatId}`, "video");
 
+// Vídeo (mp4, webm, mov, etc) — Cloudinary resource_type "video"
+export const uploadChatVideo = (chatId, file) =>
+  uploadToCloudinary(file, `videos/${chatId}`, "video");
+
 // Documentos / arquivos genéricos (PDF, XML, DOC, ZIP etc.)
 export const uploadChatFile = (chatId, file) =>
   uploadToCloudinary(file, `files/${chatId}`, "raw");

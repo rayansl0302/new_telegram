@@ -48,6 +48,8 @@ function MessageBubble({
     ? message.text
     : message.images?.length || message.imageUrl
     ? "[Imagem]"
+    : message.videoUrl
+    ? "[Vídeo]"
     : message.audioUrl
     ? "[Áudio]"
     : message.file
@@ -212,19 +214,25 @@ function MessageBubble({
               {senderName}
             </p>
           )}
-          {message.imageUrl && (
-            <button
-              type="button"
-              onClick={() => setLightboxOpen(true)}
-              className="block w-full"
-              aria-label="Ampliar imagem"
+          {imageUrls.length > 0 && (
+            <ImageGallery
+              urls={imageUrls}
+              onOpenAt={(i) => {
+                setLightboxStartIndex(i);
+                setLightboxOpen(true);
+              }}
+            />
+          )}
+          {message.videoUrl && (
+            <video
+              controls
+              playsInline
+              preload="metadata"
+              src={message.videoUrl}
+              className="rounded-lg mb-1 max-w-full max-h-80 bg-black"
             >
-              <img
-                src={message.imageUrl}
-                alt="imagem"
-                className="rounded-lg mb-1 max-w-full max-h-80 object-contain hover:opacity-90 transition"
-              />
-            </button>
+              Seu navegador não suporta vídeo HTML5.
+            </video>
           )}
           {message.audioUrl && (
             <audio
