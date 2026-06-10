@@ -27,19 +27,15 @@ dist-ssr
 .env.local
 .env.*.local
 
-# Android / Bubblewrap (TWA build) — keystore e outputs locais.
-# O APK final é copiado pra public/downloads/app.apk (esse SIM vai pro git
+# Android / Bubblewrap (TWA build).
+#
+# Tudo em android/ é regenerado por `npm run build:apk` a partir do
+# twa-manifest.json + site.webmanifest da web. So versiona-se o manifest;
+# o resto (keystore, app/, gradle/, build artifacts) fica apenas local.
+#
+# O APK final fica em public/downloads/app.apk (esse SIM vai pro git
 # pra ser servido pelo Vercel).
-android/.gradle/
-android/build/
-android/app/build/
-android/app/release/
-android/local.properties
-android/gradlew
-android/gradlew.bat
-android/gradle/
-android/.idea/
-android/*.apk
-android/*.aab
+android/*
+!android/twa-manifest.json
 *.keystore
 *.jks

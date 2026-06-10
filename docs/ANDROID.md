@@ -1,8 +1,8 @@
 # Build do APK Android (TWA)
 
 O APK do Telegram Clone é gerado **localmente** via
-[Bubblewrap](https://github.com/GoogleChromeLabs/bubblewrap) — a CLI oficial
-do Google para empacotar PWAs como Trusted Web Activity.
+[@bubblewrap/core](https://github.com/GoogleChromeLabs/bubblewrap) — usado
+programaticamente pelo script `scripts/build-apk.mjs` (sem CLI interativo).
 
 Depois de gerado, o APK fica em `public/downloads/app.apk` e é servido
 estaticamente pelo Vercel. O frontend detecta a presença do arquivo via
@@ -11,116 +11,141 @@ estaticamente pelo Vercel. O frontend detecta a presença do arquivo via
 > **Por que TWA e não Capacitor/React Native?**
 > TWA garante a regra principal do projeto (veja `RULES.md`): qualquer
 > atualização no webapp **automaticamente** chega no APK na próxima
-> abertura, sem rebuild. O shell Android só carrega `https://new-telegram-bice.vercel.app`.
+> abertura, sem rebuild. O shell Android só carrega
+> `https://new-telegram-bice.vercel.app`.
 
 ---
 
 ## Setup inicial (uma vez por máquina)
 
-### 1. Pré-requisitos
+### 1. JDK 17
 
-- Node.js 18+ (já tem)
-- **JDK 17** — https://adoptium.net/temurin/releases/?version=17
-- Bubblewrap usa o Android SDK Command-Line Tools por baixo, mas baixa
-  automaticamente na primeira execução.
+Baixe a versão portátil do Temurin (Eclipse Adoptium):
+https://api.adoptium.net/v3/binary/latest/17/ga/windows/x64/jdk/hotspot/normal/eclipse
 
-Confirme:
+Extraia em qualquer lugar (sugestão: `%LOCALAPPDATA%\jdk-17\`). Confirme:
 
-```bash
-java -version
-# deve mostrar "openjdk version 17.x"
+```powershell
+& "$env:LOCALAPPDATA\jdk-17\jdk-17.0.19+10\bin\java.exe" -version
 ```
 
-### 2. Instalar Bubblewrap globalmente
+Defina `JAVA_HOME` apontando para essa pasta:
 
-```bash
+```powershell
+[System.Environment]::SetEnvironmentVariable("JAVA_HOME", "$env:LOCALAPPDATA\jdk-17\jdk-17.0.19+10", "User")
+```
+
+### 2. Android SDK
+
+Baixe as Command Line Tools:
+https://dl.google.com/android/repository/commandlinetools-win-11076708_latest.zip
+
+Extraia em `%LOCALAPPDATA%\android-sdk\cmdline-tools\latest\` (importante:
+o conteúdo do ZIP fica DENTRO de `cmdline-tools/latest/`, não em
+`cmdline-tools/cmdline-tools/`).
+
+Defina `ANDROID_HOME`:
+
+```powershell
+[System.Environment]::SetEnvironmentVariable("ANDROID_HOME", "$env:LOCALAPPDATA\android-sdk", "User")
+```
+
+**Aceitar licenças sem prompt** — crie estes arquivos manualmente:
+
+```powershell
+mkdir "$env:ANDROID_HOME\licenses"
+"`n8933bad161af4178b1185d1a37fbf41ea5269c55`nd56f5187479451eabf01fb78af6dfcb131a6481e`n24333f8a63b6825ea9c5514f83c2829b004d1fee" | Set-Content "$env:ANDROID_HOME\licenses\android-sdk-license" -Encoding ASCII
+"`n84831b9409646a918e30573bab4c9c91346d8abd`n504667f4c0de7af1a06de9f4b1727b84351f2910" | Set-Content "$env:ANDROID_HOME\licenses\android-sdk-preview-license" -Encoding ASCII
+```
+
+**Instalar packages obrigatórios:**
+
+```powershell
+$sdkmanager = "$env:ANDROID_HOME\cmdline-tools\latest\bin\sdkmanager.bat"
+& $sdkmanager --install "platforms;android-34" "build-tools;34.0.0" "platform-tools"
+```
+
+**Criar pasta `tools/` (workaround):** o `@bubblewrap/core` espera
+`$ANDROID_HOME/tools/` ou `$ANDROID_HOME/bin/`. Copie o cmdline-tools para
+satisfazer:
+
+```powershell
+Copy-Item -Recurse "$env:ANDROID_HOME\cmdline-tools\latest" "$env:ANDROID_HOME\tools"
+```
+
+### 3. Bubblewrap CLI
+
+```powershell
 npm install -g @bubblewrap/cli
 ```
 
-Confirme:
+Isso instala também o `@bubblewrap/core` que o script `build-apk.mjs` usa
+programaticamente.
 
-```bash
-bubblewrap --help
+### 4. Verificar
+
+```powershell
+java -version            # deve dizer 17.x
+Test-Path "$env:ANDROID_HOME\tools\bin\sdkmanager.bat"  # True
+Test-Path "$env:ANDROID_HOME\build-tools\34.0.0"        # True
+bubblewrap --version     # deve mostrar versao
 ```
-
-Se aparecer ajuda da CLI, está OK.
-
-### 3. Inicializar a pasta `android/`
-
-Na **primeira vez**, dentro da raiz do projeto:
-
-```bash
-mkdir android
-cd android
-bubblewrap init --manifest=https://new-telegram-bice.vercel.app/manifest.webmanifest
-```
-
-Bubblewrap vai perguntar várias coisas. Sugestões de resposta:
-
-| Pergunta | Resposta |
-|---|---|
-| Domain | `new-telegram-bice.vercel.app` |
-| URL path | `/` |
-| Application name | `Telegram Clone` |
-| Short name | `Telegram` |
-| Application ID | `com.rayan.telegramclone` |
-| Display mode | `standalone` |
-| Orientation | `default` |
-| Status bar color | (mesmo do theme_color do manifest) |
-| Signing key | **Generate new keystore** (primeira vez) |
-| Key alias | `android` |
-| Key store password | escolha uma senha forte — **GUARDE FORA DO REPO** |
-| Key password | mesma senha tá OK |
-
-Bubblewrap vai criar `twa-manifest.json` e `android.keystore` em `android/`.
-
-**⚠️ A keystore é a chave privada do app.** Sem ela, você não consegue
-publicar atualizações que o Android reconheça como "mesma app". O
-`.gitignore` já ignora `*.keystore`, então ela fica **só na sua máquina** —
-faça backup em local seguro (1Password, drive criptografado, etc.).
-
-### 4. Validar o setup
-
-```bash
-cd android
-bubblewrap doctor
-```
-
-Se tudo OK, próximo passo é gerar o APK.
 
 ---
 
-## Gerar/atualizar o APK
+## Gerar / atualizar o APK
 
-Sempre que precisar regenerar (mudou manifest, ícone, ou release marco):
+Tudo via npm script único:
 
 ```bash
 npm run build:apk
 ```
 
-Esse script:
+O script `scripts/build-apk.mjs`:
 
-1. Roda `bubblewrap build` dentro de `android/`
-2. Vai pedir a senha da keystore
-3. Copia o APK assinado pra `public/downloads/app.apk`
+1. Valida JDK + Android SDK
+2. Carrega `https://new-telegram-bice.vercel.app/site.webmanifest`
+3. Customiza package ID (`com.rayan.telegramclone`), nome, versão
+4. **Primeira execução**: gera nova keystore em `android/android.keystore`
+   com senha gravada em `android/KEYSTORE-CREDENTIALS.txt` (gitignored)
+5. **Re-execução**: PRESERVA a keystore existente (continuidade de
+   assinatura — Android só aceita atualização se a chave for a mesma)
+6. Gera projeto Android via TwaGenerator
+7. Roda Gradle assembleRelease (Gradle distribution baixado na 1ª vez, ~150MB)
+8. Zipalign + apksigner
+9. Copia APK assinado para `public/downloads/app.apk`
 
-Depois:
+Output esperado:
 
-```bash
-git add public/downloads/app.apk
-git commit -m "chore: atualiza APK Android"
-git push
+```
+[build-apk] APK gerado: D:\Projetos\new_whatsapp\public\downloads\app.apk
+[build-apk] Tamanho: 2.49 MB
 ```
 
-O Vercel deploya, o frontend detecta `/downloads/app.apk` via HEAD e o botão
-"Baixar APK" aparece no perfil pra usuários Android.
+---
+
+## Backup OBRIGATÓRIO da keystore
+
+`android/android.keystore` é a chave privada do app. Sem ela, **você não
+consegue publicar atualizações** que o Android reconheça como "mesma app".
+
+**Faça backup em local seguro:**
+
+- O arquivo `android/android.keystore`
+- O arquivo `android/KEYSTORE-CREDENTIALS.txt` (que tem a senha)
+
+Sugestões: 1Password, Bitwarden, drive criptografado, pen drive guardado.
+
+**Estes arquivos NÃO vão pro git** (gitignored). Se você perder, o melhor
+caminho é trocar o `packageId` (`com.rayan.telegramclone` → `com.rayan.telegramclone2`)
+e tratar como app novo — usuários existentes precisam desinstalar a versão antiga.
 
 ---
 
 ## Atualizando o conteúdo do app (caso comum)
 
-**Você NÃO precisa rebuildar o APK pra cada feature do webapp.** O TWA carrega
-o site do Vercel a cada abertura, então:
+**Você NÃO precisa rebuildar o APK pra cada feature do webapp.** O TWA
+carrega o site do Vercel a cada abertura, então:
 
 - Mudou um componente React → `git push` → APK reflete na próxima abertura
 - Mudou Firestore rules → aplica no console Firebase → APK reflete
@@ -130,13 +155,32 @@ Veja `RULES.md` para a lista exata de quando rebuild é obrigatório.
 
 ---
 
+## Após rebuildar — commitar o APK
+
+```bash
+git add public/downloads/app.apk android/twa-manifest.json
+git commit -m "chore: atualiza APK Android"
+git push
+```
+
+O Vercel deploya, o frontend detecta `/downloads/app.apk` via HEAD e o botão
+"Baixar APK" continua aparecendo no perfil pra usuários Android.
+
+---
+
 ## Digital Asset Links (TWA fullscreen sem barra do Chrome)
 
 Pra o APK abrir o site sem mostrar a barra de URL do Chrome (modo fullscreen
-de verdade), precisa publicar um arquivo `.well-known/assetlinks.json` no
-domínio.
+de verdade), precisa publicar `.well-known/assetlinks.json` no domínio.
 
-Bubblewrap gera o arquivo no setup. Conteúdo típico:
+Pegue o SHA-256 fingerprint da sua keystore:
+
+```powershell
+$env:Path = "$env:JAVA_HOME\bin;$env:Path"
+keytool -list -v -keystore android\android.keystore -alias android -storepass "TelegramClone2026!"
+```
+
+Procure a linha `SHA256:` e use no arquivo `public/.well-known/assetlinks.json`:
 
 ```json
 [{
@@ -149,8 +193,7 @@ Bubblewrap gera o arquivo no setup. Conteúdo típico:
 }]
 ```
 
-Salve isso em `public/.well-known/assetlinks.json` (já vai pro Vercel
-automaticamente como `https://new-telegram-bice.vercel.app/.well-known/assetlinks.json`).
+Vai pro Vercel como `https://new-telegram-bice.vercel.app/.well-known/assetlinks.json`.
 
 Sem isso, o APK ainda funciona — só mostra uma barrinha discreta com a URL no
 topo. Com isso, fica fullscreen igual app nativo.
@@ -159,27 +202,23 @@ topo. Com isso, fica fullscreen igual app nativo.
 
 ## Troubleshooting
 
-### `bubblewrap build` falha com "JDK não encontrado"
+### `ValidatePathError: The provided androidSdk isn't correct`
 
-Setar `JAVA_HOME`:
+Falta a pasta `$ANDROID_HOME/tools/` ou `$ANDROID_HOME/bin/`. Veja seção 2
+acima — copie `cmdline-tools/latest` para `tools/`.
 
-- Windows: `setx JAVA_HOME "C:\Program Files\Eclipse Adoptium\jdk-17.0.x"`
-- Mac/Linux: `export JAVA_HOME=$(/usr/libexec/java_home -v 17)` no `~/.zshrc`
+### `'gradlew.bat' não é reconhecido como um comando interno`
 
-### APK gerado mas não instala no celular
+cmd.exe não está procurando no cwd. O script já faz workaround prependando
+`android/` ao PATH antes de chamar Gradle. Se ainda falhar, confirme que
+`android/gradlew.bat` foi gerado.
 
-- Confirme que "Fontes desconhecidas" / "Instalar apps desconhecidos" está
-  habilitado para o navegador que baixou o APK.
-- Confirme que o APK foi **assinado** (não é `app-release-unsigned.apk`).
+### Gradle baixa de novo a cada build
 
-### Como saber a versão do APK que está em produção
+Normal na 1ª execução. Próximas usam cache em `~/.gradle/`.
 
-```bash
-# Mac/Linux
-unzip -p public/downloads/app.apk META-INF/MANIFEST.MF | head
+### Mudei o ícone do app mas o APK ainda mostra o antigo
 
-# Ou abrir o twa-manifest.json — campos `appVersionCode` e `appVersionName`
-cat android/twa-manifest.json
-```
-
-Bubblewrap incrementa `appVersionCode` automaticamente a cada build.
+Os ícones do TWA são copiados de `public/android-chrome-512x512.png` durante
+o build. Confirme que o arquivo foi atualizado no Vercel deploy ANTES de
+rodar `npm run build:apk`.
