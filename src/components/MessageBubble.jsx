@@ -38,6 +38,23 @@ function MessageBubble({
     senderInfo?.displayName || senderInfo?.email || "Alguém";
   const colorClass = showSender ? colorFromName(senderName) : "";
 
+  // Nome do remetente pra cópia formatada (funciona pra mensagem propria
+  // e de outros, em direct ou grupo, lendo do participantInfo do chat).
+  const copySender =
+    chat?.participantInfo?.[message.senderId]?.displayName ||
+    chat?.participantInfo?.[message.senderId]?.email ||
+    senderName;
+  const copyText = message.text
+    ? message.text
+    : message.images?.length || message.imageUrl
+    ? "[Imagem]"
+    : message.audioUrl
+    ? "[Áudio]"
+    : message.file
+    ? "[Arquivo]"
+    : "";
+  const copyTimestamp = message.createdAt?.toMillis?.() || "";
+
   const readStatus = isOwn ? computeReadStatus(message, chat) : null;
   // Dados da mensagem disponíveis pra qualquer mensagem própria (direct ou grupo)
   // — em direct mostra a hora exata em que o outro leu/recebeu.
@@ -152,6 +169,10 @@ function MessageBubble({
   return (
     <div
       id={`msg-${message.id}`}
+      data-message-id={message.id}
+      data-message-sender={copySender}
+      data-message-timestamp={copyTimestamp}
+      data-message-text={copyText}
       className={`flex items-center gap-0.5 md:gap-1 scroll-mt-24 ${
         isOwn ? "justify-end" : "justify-start"
       }`}

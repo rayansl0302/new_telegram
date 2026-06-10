@@ -1,6 +1,10 @@
 import { useEffect, useRef } from "react";
 import MessageBubble from "./MessageBubble";
 import SystemMessage from "./SystemMessage";
+import {
+  getSelectedMessageElements,
+  formatMessagesAsWhatsApp,
+} from "../utils/copyFormat";
 
 function MessageList({
   messages,
@@ -12,11 +16,26 @@ function MessageList({
   currentMatchId,
 }) {
   const bottomRef = useRef(null);
+  const containerRef = useRef(null);
   const isGroup = chat?.type === "group";
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Intercepta Ctrl+C / copy: se uma ou mais mensagens estão na seleção,
+  // formata estilo WhatsApp ([HH:MM, DD/MM/YYYY] Nome: texto). Seleções
+  // que não tocam nenhuma mensagem caem no comportamento padrão.
+  const handleCopy = (e) => {
+    const container = containerRef.current;
+    if (!container) return;
+    const selected = getSelectedMessageElements(container);
+    if (selected.length === 0) return;
+    const text = formatMessagesAsWhatsApp(selected);
+    if (!text) return;
+    e.preventDefault();
+    e.clipboardData.setData("text/plain", text);
+  };
 
   if (loading) {
     return (
@@ -35,7 +54,11 @@ function MessageList({
   }
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 space-y-2">
+    <div
+      ref={containerRef}
+      onCopy={handleCopy}
+      className="flex-1 overflow-y-auto p-4 space-y-2"
+    >
       {messages.map((msg) => {
         if (msg.system) {
           return <SystemMessage key={msg.id} message={msg} />;
